@@ -4,12 +4,23 @@ public class SavedItemExample : MonoBehaviour
 {
     private void Start()
     {
+        SavedItemManager savedItemManager = FindFirstObjectByType<SavedItemManager>();
+
         SavedItemData savedItem = new SavedItemData();
 
         savedItem.itemId = "item-001";
         savedItem.itemName = "Keys";
         savedItem.lastKnownPosition = new Vector3(1.5f, 0.8f, -2.0f);
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+
+        if (savedItemManager != null)
+        {
+            savedItemManager.AddItem(savedItem);
+        }
+        else
+        {
+            Debug.Log("No SavedItemManager found in the scene.");
+        }
 
         Debug.Log("Saved item: " + savedItem.itemName);
         Debug.Log("Item ID: " + savedItem.itemId);
