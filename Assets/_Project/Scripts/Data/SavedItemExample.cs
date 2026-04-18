@@ -6,6 +6,11 @@ public class SavedItemExample : MonoBehaviour
     {
         SavedItemManager savedItemManager = FindFirstObjectByType<SavedItemManager>();
 
+        if (savedItemManager != null)
+        {
+            savedItemManager.LoadData();
+        }
+
         SavedItemData savedItem = new SavedItemData();
 
         savedItem.itemId = "item-001";
@@ -16,6 +21,7 @@ public class SavedItemExample : MonoBehaviour
         if (savedItemManager != null)
         {
             savedItemManager.AddItem(savedItem);
+            savedItemManager.SaveData();
         }
         else
         {
