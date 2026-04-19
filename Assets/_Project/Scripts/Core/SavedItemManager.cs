@@ -37,17 +37,51 @@ public class SavedItemManager : MonoBehaviour
 
 	public SavedItemData GetItemByName(string itemName)
 	{
+		SavedItemData bestMatch = null;
+		System.DateTime bestSavedTime = System.DateTime.MinValue;
+		bool hasBestSavedTime = false;
+		int matchCount = 0;
+
 		for (int i = 0; i < savedItems.Count; i++)
 		{
 			SavedItemData item = savedItems[i];
 
 			if (item != null && item.itemName == itemName)
 			{
-				return item;
+				matchCount++;
+
+				if (bestMatch == null)
+				{
+					bestMatch = item;
+
+					System.DateTime firstSavedTime;
+					if (System.DateTime.TryParse(item.savedAtUtc, out firstSavedTime))
+					{
+						bestSavedTime = firstSavedTime;
+						hasBestSavedTime = true;
+					}
+
+					continue;
+				}
+
+				System.DateTime currentSavedTime;
+				bool hasCurrentSavedTime = System.DateTime.TryParse(item.savedAtUtc, out currentSavedTime);
+
+				if (hasCurrentSavedTime && (!hasBestSavedTime || currentSavedTime > bestSavedTime))
+				{
+					bestMatch = item;
+					bestSavedTime = currentSavedTime;
+					hasBestSavedTime = true;
+				}
 			}
 		}
 
-		return null;
+		if (matchCount > 1 && bestMatch != null)
+		{
+			Debug.Log("Multiple items found with name '" + itemName + "'. Returning item: Id=" + bestMatch.itemId + ", SavedAtUtc=" + bestMatch.savedAtUtc);
+		}
+
+		return bestMatch;
 	}
 
 	public void LogAllItems()
