@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class SavedItemFinderExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
+	private List<GameObject> spawnedMarkers = new List<GameObject>();
 
 	private void Start()
 	{
@@ -31,18 +33,48 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
-		SavedItemData item = savedItemManager.GetItemByName("Keys");
+		SpawnAllSavedItems();
+	}
 
-		if (item != null)
+	private void SpawnAllSavedItems()
+	{
+		ClearSpawnedMarkers();
+
+		savedItemManager.LoadData();
+
+		List<SavedItemData> items = savedItemManager.GetAllItems();
+
+		if (items == null || items.Count == 0)
 		{
+			Debug.Log("No saved items to spawn markers for.");
+			return;
+		}
+
+		for (int i = 0; i < items.Count; i++)
+		{
+			SavedItemData item = items[i];
+
 			GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 			marker.transform.position = item.lastKnownPosition;
 			marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-			Debug.Log("Marker created for Keys.");
+			marker.name = item.itemName + " Marker";
+
+			spawnedMarkers.Add(marker);
 		}
-		else
+
+		Debug.Log("Spawned " + spawnedMarkers.Count + " marker(s).");
+	}
+
+	private void ClearSpawnedMarkers()
+	{
+		for (int i = 0; i < spawnedMarkers.Count; i++)
 		{
-			Debug.Log("No item named Keys was found.");
+			if (spawnedMarkers[i] != null)
+			{
+				Destroy(spawnedMarkers[i]);
+			}
 		}
+
+		spawnedMarkers.Clear();
 	}
 }
