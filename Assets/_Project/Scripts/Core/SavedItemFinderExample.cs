@@ -5,6 +5,7 @@ public class SavedItemFinderExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
 	private List<GameObject> spawnedMarkers = new List<GameObject>();
+	private Transform spawnedMarkersParent;
 
 	private void Start()
 	{
@@ -40,6 +41,18 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		ClearSpawnedMarkers();
 
+		if (spawnedMarkersParent == null)
+		{
+			GameObject parentObject = GameObject.Find("SpawnedMarkers");
+
+			if (parentObject == null)
+			{
+				parentObject = new GameObject("SpawnedMarkers");
+			}
+
+			spawnedMarkersParent = parentObject.transform;
+		}
+
 		savedItemManager.LoadData();
 
 		List<SavedItemData> items = savedItemManager.GetAllItems();
@@ -55,6 +68,7 @@ public class SavedItemFinderExample : MonoBehaviour
 			SavedItemData item = items[i];
 
 			GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+			marker.transform.SetParent(spawnedMarkersParent, true);
 			marker.transform.position = item.lastKnownPosition;
 			marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
 			marker.name = item.itemName + " Marker";
