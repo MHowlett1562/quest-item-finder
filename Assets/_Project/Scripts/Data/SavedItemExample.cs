@@ -2,36 +2,44 @@ using UnityEngine;
 
 public class SavedItemExample : MonoBehaviour
 {
+	private SavedItemManager savedItemManager;
+
     private void Start()
     {
-        SavedItemManager savedItemManager = FindFirstObjectByType<SavedItemManager>();
+        savedItemManager = FindFirstObjectByType<SavedItemManager>();
 
         if (savedItemManager != null)
         {
             savedItemManager.LoadData();
-            savedItemManager.LogAllItems();
-        }
-
-        SavedItemData savedItem = new SavedItemData();
-
-        savedItem.itemId = "item-001";
-        savedItem.itemName = "Keys";
-        savedItem.lastKnownPosition = new Vector3(1.5f, 0.8f, -2.0f);
-        savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
-
-        if (savedItemManager != null)
-        {
-            savedItemManager.AddItem(savedItem);
-            savedItemManager.SaveData();
         }
         else
         {
             Debug.Log("No SavedItemManager found in the scene.");
         }
+    }
+
+    private void Update()
+    {
+        if (!Input.GetKeyDown(KeyCode.K))
+        {
+            return;
+        }
+
+        if (savedItemManager == null)
+        {
+            Debug.Log("No SavedItemManager found in the scene.");
+            return;
+        }
+
+        SavedItemData savedItem = new SavedItemData();
+        savedItem.itemId = System.Guid.NewGuid().ToString();
+        savedItem.itemName = "Keys";
+        savedItem.lastKnownPosition = transform.position;
+        savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+
+        savedItemManager.AddItem(savedItem);
+        savedItemManager.SaveData();
 
         Debug.Log("Saved item: " + savedItem.itemName);
-        Debug.Log("Item ID: " + savedItem.itemId);
-        Debug.Log("Position: " + savedItem.lastKnownPosition);
-        Debug.Log("Saved at: " + savedItem.savedAtUtc);
     }
 }
