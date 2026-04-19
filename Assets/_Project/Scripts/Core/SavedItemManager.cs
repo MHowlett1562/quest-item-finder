@@ -26,7 +26,8 @@ public class SavedItemManager : MonoBehaviour
 		}
 
 		savedItems.Add(item);
-		Debug.Log("Added item: " + item.itemName);
+		Debug.Log("Added item: Name=" + item.itemName + ", Position=" + item.lastKnownPosition);
+		Debug.Log("Total saved items: " + savedItems.Count);
 	}
 
 	public List<SavedItemData> GetAllItems()
