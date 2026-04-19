@@ -9,6 +9,7 @@ public class SavedItemExample : MonoBehaviour
         if (savedItemManager != null)
         {
             savedItemManager.LoadData();
+            savedItemManager.LogAllItems();
         }
 
         SavedItemData savedItem = new SavedItemData();

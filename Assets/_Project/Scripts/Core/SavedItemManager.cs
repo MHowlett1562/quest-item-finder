@@ -23,6 +23,43 @@ public class SavedItemManager : MonoBehaviour
 		return savedItems;
 	}
 
+	public SavedItemData GetItemByName(string itemName)
+	{
+		for (int i = 0; i < savedItems.Count; i++)
+		{
+			SavedItemData item = savedItems[i];
+
+			if (item != null && item.itemName == itemName)
+			{
+				return item;
+			}
+		}
+
+		return null;
+	}
+
+	public void LogAllItems()
+	{
+		if (savedItems == null || savedItems.Count == 0)
+		{
+			Debug.Log("No saved items.");
+			return;
+		}
+
+		for (int i = 0; i < savedItems.Count; i++)
+		{
+			SavedItemData item = savedItems[i];
+
+			if (item == null)
+			{
+				Debug.Log("Saved item " + i + ": null");
+				continue;
+			}
+
+			Debug.Log("Saved item " + i + ": Name=" + item.itemName + ", Id=" + item.itemId + ", Position=" + item.lastKnownPosition + ", SavedAtUtc=" + item.savedAtUtc);
+		}
+	}
+
 	public void SaveData()
 	{
 		string filePath = Path.Combine(Application.persistentDataPath, saveFileName);
