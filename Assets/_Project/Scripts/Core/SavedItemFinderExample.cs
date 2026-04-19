@@ -78,6 +78,8 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
+		Debug.Log("Selected item: Name=" + item.itemName + ", Id=" + item.itemId + ", Position=" + item.lastKnownPosition + ", SavedAtUtc=" + item.savedAtUtc);
+
 		SpawnMarkerForItem(item);
 		Debug.Log("Spawned marker for item: " + item.itemName);
 	}
