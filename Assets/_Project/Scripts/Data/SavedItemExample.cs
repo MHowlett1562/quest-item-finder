@@ -34,12 +34,19 @@ public class SavedItemExample : MonoBehaviour
         SavedItemData savedItem = new SavedItemData();
         savedItem.itemId = System.Guid.NewGuid().ToString();
         savedItem.itemName = "Keys";
-        savedItem.lastKnownPosition = transform.position;
+        if (Camera.main != null)
+        {
+            savedItem.lastKnownPosition = Camera.main.transform.position + (Camera.main.transform.forward * 2f);
+        }
+        else
+        {
+            savedItem.lastKnownPosition = transform.position;
+        }
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
 
         savedItemManager.AddItem(savedItem);
         savedItemManager.SaveData();
 
-        Debug.Log("Saved item: " + savedItem.itemName);
+        Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
     }
 }
