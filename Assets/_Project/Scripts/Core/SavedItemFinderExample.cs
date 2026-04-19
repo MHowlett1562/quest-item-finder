@@ -6,6 +6,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private SavedItemManager savedItemManager;
 	private List<GameObject> spawnedMarkers = new List<GameObject>();
 	private Transform spawnedMarkersParent;
+	[SerializeField] private string testItemName = "Keys";
 
 	private void Start()
 	{
@@ -23,35 +24,26 @@ public class SavedItemFinderExample : MonoBehaviour
 
 	private void Update()
 	{
-		if (!Input.GetKeyDown(KeyCode.F))
-		{
-			return;
-		}
-
 		if (savedItemManager == null)
 		{
 			Debug.Log("No SavedItemManager found in the scene.");
 			return;
 		}
 
-		SpawnAllSavedItems();
+		if (Input.GetKeyDown(KeyCode.F))
+		{
+			SpawnAllSavedItems();
+		}
+		else if (Input.GetKeyDown(KeyCode.G))
+		{
+			SpawnOneSavedItemByName(testItemName);
+		}
 	}
 
 	private void SpawnAllSavedItems()
 	{
 		ClearSpawnedMarkers();
-
-		if (spawnedMarkersParent == null)
-		{
-			GameObject parentObject = GameObject.Find("SpawnedMarkers");
-
-			if (parentObject == null)
-			{
-				parentObject = new GameObject("SpawnedMarkers");
-			}
-
-			spawnedMarkersParent = parentObject.transform;
-		}
+		EnsureSpawnedMarkersParent();
 
 		savedItemManager.LoadData();
 
@@ -66,17 +58,54 @@ public class SavedItemFinderExample : MonoBehaviour
 		for (int i = 0; i < items.Count; i++)
 		{
 			SavedItemData item = items[i];
-
-			GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-			marker.transform.SetParent(spawnedMarkersParent, true);
-			marker.transform.position = item.lastKnownPosition;
-			marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-			marker.name = item.itemName + " Marker";
-
-			spawnedMarkers.Add(marker);
+			SpawnMarkerForItem(item);
 		}
 
 		Debug.Log("Spawned " + spawnedMarkers.Count + " marker(s).");
+	}
+
+	private void SpawnOneSavedItemByName(string itemName)
+	{
+		ClearSpawnedMarkers();
+		EnsureSpawnedMarkersParent();
+
+		savedItemManager.LoadData();
+		SavedItemData item = savedItemManager.GetItemByName(itemName);
+
+		if (item == null)
+		{
+			Debug.Log("No saved item named '" + itemName + "' was found.");
+			return;
+		}
+
+		SpawnMarkerForItem(item);
+		Debug.Log("Spawned marker for item: " + item.itemName);
+	}
+
+	private void EnsureSpawnedMarkersParent()
+	{
+		if (spawnedMarkersParent == null)
+		{
+			GameObject parentObject = GameObject.Find("SpawnedMarkers");
+
+			if (parentObject == null)
+			{
+				parentObject = new GameObject("SpawnedMarkers");
+			}
+
+			spawnedMarkersParent = parentObject.transform;
+		}
+	}
+
+	private void SpawnMarkerForItem(SavedItemData item)
+	{
+		GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+		marker.transform.SetParent(spawnedMarkersParent, true);
+		marker.transform.position = item.lastKnownPosition;
+		marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+		marker.name = item.itemName + " Marker";
+
+		spawnedMarkers.Add(marker);
 	}
 
 	private void ClearSpawnedMarkers()
