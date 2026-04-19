@@ -14,6 +14,17 @@ public class SavedItemManager : MonoBehaviour
 			return;
 		}
 
+		for (int i = 0; i < savedItems.Count; i++)
+		{
+			SavedItemData existingItem = savedItems[i];
+
+			if (existingItem != null && existingItem.itemName == item.itemName)
+			{
+				Debug.LogWarning("Another item with the name '" + item.itemName + "' already exists.");
+				break;
+			}
+		}
+
 		savedItems.Add(item);
 		Debug.Log("Added item: " + item.itemName);
 	}
