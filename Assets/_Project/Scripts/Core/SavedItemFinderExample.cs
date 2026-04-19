@@ -79,6 +79,12 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		Debug.Log("Selected item: Name=" + item.itemName + ", Id=" + item.itemId + ", Position=" + item.lastKnownPosition + ", SavedAtUtc=" + item.savedAtUtc);
+		if (Camera.main != null)
+		{
+			float distanceToItem = Vector3.Distance(Camera.main.transform.position, item.lastKnownPosition);
+			Debug.Log("Distance to selected item: " + distanceToItem.ToString("F2") + " meters");
+			Debug.DrawLine(Camera.main.transform.position, item.lastKnownPosition, Color.red, 5f);
+		}
 
 		SpawnMarkerForItem(item);
 		Debug.Log("Spawned marker for item: " + item.itemName);
