@@ -14,6 +14,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] private string testItemName = "Keys";
 	private bool wasLeftTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
+	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
+	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
 
 	private void Start()
 	{
@@ -108,6 +110,12 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		GameObject distanceTextObject = new GameObject("DistanceText");
 		distanceText = distanceTextObject.AddComponent<TextMesh>();
+		if (Camera.main != null)
+		{
+			distanceText.transform.SetParent(Camera.main.transform, false);
+			distanceText.transform.localPosition = distanceTextLocalOffset;
+			distanceText.transform.localRotation = Quaternion.identity;
+		}
 		distanceText.fontSize = 48;
 		distanceText.characterSize = 0.01f;
 		distanceText.anchor = TextAnchor.MiddleCenter;
@@ -122,9 +130,13 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
-		Transform cameraTransform = Camera.main.transform;
-		distanceText.transform.position = cameraTransform.position + cameraTransform.forward * 1.0f + cameraTransform.up * -0.15f;
-		distanceText.transform.rotation = Quaternion.LookRotation(distanceText.transform.position - cameraTransform.position);
+		if (distanceText.transform.parent != Camera.main.transform)
+		{
+			distanceText.transform.SetParent(Camera.main.transform, false);
+		}
+
+		distanceText.transform.localPosition = distanceTextLocalOffset;
+		distanceText.transform.localRotation = Quaternion.identity;
 	}
 
 	private void EnsureDirectionalIndicator()
@@ -136,6 +148,11 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		directionalIndicator = GameObject.CreatePrimitive(PrimitiveType.Cube);
 		directionalIndicator.name = "DirectionalIndicator";
+		if (Camera.main != null)
+		{
+			directionalIndicator.transform.SetParent(Camera.main.transform, false);
+			directionalIndicator.transform.localPosition = directionalIndicatorLocalOffset;
+		}
 		directionalIndicator.transform.localScale = new Vector3(0.05f, 0.05f, 0.15f);
 	}
 
@@ -146,8 +163,12 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
-		Transform cameraTransform = Camera.main.transform;
-		directionalIndicator.transform.position = cameraTransform.position + cameraTransform.forward * 0.7f;
+		if (directionalIndicator.transform.parent != Camera.main.transform)
+		{
+			directionalIndicator.transform.SetParent(Camera.main.transform, false);
+		}
+
+		directionalIndicator.transform.localPosition = directionalIndicatorLocalOffset;
 
 		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - directionalIndicator.transform.position;
 		if (directionToTarget.sqrMagnitude > 0.0001f)
