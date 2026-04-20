@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.XR;
 
 public class SavedItemFinderExample : MonoBehaviour
 {
@@ -11,6 +12,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh distanceText;
 	private GameObject directionalIndicator;
 	[SerializeField] private string testItemName = "Keys";
+	private bool wasLeftTriggerPressed;
+	private bool wasRightPrimaryButtonPressed;
 
 	private void Start()
 	{
@@ -34,12 +37,32 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
-		if (Input.GetKeyDown(KeyCode.F))
+		bool leftTriggerPressed = false;
+		InputDevice leftHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+		if (leftHandDevice.isValid)
+		{
+			leftHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out leftTriggerPressed);
+		}
+
+		bool rightPrimaryButtonPressed = false;
+		InputDevice rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+		if (rightHandDevice.isValid)
+		{
+			rightHandDevice.TryGetFeatureValue(CommonUsages.primaryButton, out rightPrimaryButtonPressed);
+		}
+
+		bool leftTriggerPressedThisFrame = leftTriggerPressed && !wasLeftTriggerPressed;
+		bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
+
+		wasLeftTriggerPressed = leftTriggerPressed;
+		wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
+
+		if (Input.GetKeyDown(KeyCode.F) || rightPrimaryButtonPressedThisFrame)
 		{
 			currentTargetItem = null;
 			SpawnAllSavedItems();
 		}
-		else if (Input.GetKeyDown(KeyCode.G))
+		else if (Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame)
 		{
 			SpawnOneSavedItemByName(testItemName);
 		}

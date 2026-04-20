@@ -1,8 +1,10 @@
 using UnityEngine;
+using UnityEngine.XR;
 
 public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
+    private bool wasRightTriggerPressed;
 
     private void Start()
     {
@@ -20,7 +22,17 @@ public class SavedItemExample : MonoBehaviour
 
     private void Update()
     {
-        if (!Input.GetKeyDown(KeyCode.K))
+        bool rightTriggerPressed = false;
+        InputDevice rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHandDevice.isValid)
+        {
+            rightHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out rightTriggerPressed);
+        }
+
+        bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
+        wasRightTriggerPressed = rightTriggerPressed;
+
+        if (!Input.GetKeyDown(KeyCode.K) && !rightTriggerPressedThisFrame)
         {
             return;
         }
