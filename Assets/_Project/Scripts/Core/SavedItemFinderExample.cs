@@ -6,6 +6,10 @@ public class SavedItemFinderExample : MonoBehaviour
 	private SavedItemManager savedItemManager;
 	private List<GameObject> spawnedMarkers = new List<GameObject>();
 	private Transform spawnedMarkersParent;
+	private SavedItemData currentTargetItem;
+	private float nextDistanceLogTime;
+	private TextMesh distanceText;
+	private GameObject directionalIndicator;
 	[SerializeField] private string testItemName = "Keys";
 
 	private void Start()
@@ -32,11 +36,100 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		if (Input.GetKeyDown(KeyCode.F))
 		{
+			currentTargetItem = null;
 			SpawnAllSavedItems();
 		}
 		else if (Input.GetKeyDown(KeyCode.G))
 		{
 			SpawnOneSavedItemByName(testItemName);
+		}
+
+		if (currentTargetItem != null && Camera.main != null)
+		{
+			EnsureDistanceText();
+			distanceText.gameObject.SetActive(true);
+			UpdateDistanceTextTransform();
+			EnsureDirectionalIndicator();
+			directionalIndicator.SetActive(true);
+			UpdateDirectionalIndicatorTransform();
+
+			float distanceToItem = Vector3.Distance(Camera.main.transform.position, currentTargetItem.lastKnownPosition);
+
+			// Draw every frame so the guidance line stays visible while in find mode.
+			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
+			distanceText.text = "Distance: " + distanceToItem.ToString("F2") + " m";
+
+			if (Time.time >= nextDistanceLogTime)
+			{
+				Debug.Log("Distance to selected item: " + distanceToItem.ToString("F2") + " meters");
+				nextDistanceLogTime = Time.time + 1f;
+			}
+		}
+		else if (distanceText != null)
+		{
+			distanceText.gameObject.SetActive(false);
+
+			if (directionalIndicator != null)
+			{
+				directionalIndicator.SetActive(false);
+			}
+		}
+	}
+
+	private void EnsureDistanceText()
+	{
+		if (distanceText != null)
+		{
+			return;
+		}
+
+		GameObject distanceTextObject = new GameObject("DistanceText");
+		distanceText = distanceTextObject.AddComponent<TextMesh>();
+		distanceText.fontSize = 48;
+		distanceText.characterSize = 0.01f;
+		distanceText.anchor = TextAnchor.MiddleCenter;
+		distanceText.alignment = TextAlignment.Center;
+		distanceText.color = Color.white;
+	}
+
+	private void UpdateDistanceTextTransform()
+	{
+		if (distanceText == null || Camera.main == null)
+		{
+			return;
+		}
+
+		Transform cameraTransform = Camera.main.transform;
+		distanceText.transform.position = cameraTransform.position + cameraTransform.forward * 1.0f + cameraTransform.up * -0.15f;
+		distanceText.transform.rotation = Quaternion.LookRotation(distanceText.transform.position - cameraTransform.position);
+	}
+
+	private void EnsureDirectionalIndicator()
+	{
+		if (directionalIndicator != null)
+		{
+			return;
+		}
+
+		directionalIndicator = GameObject.CreatePrimitive(PrimitiveType.Cube);
+		directionalIndicator.name = "DirectionalIndicator";
+		directionalIndicator.transform.localScale = new Vector3(0.05f, 0.05f, 0.15f);
+	}
+
+	private void UpdateDirectionalIndicatorTransform()
+	{
+		if (directionalIndicator == null || currentTargetItem == null || Camera.main == null)
+		{
+			return;
+		}
+
+		Transform cameraTransform = Camera.main.transform;
+		directionalIndicator.transform.position = cameraTransform.position + cameraTransform.forward * 0.7f;
+
+		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - directionalIndicator.transform.position;
+		if (directionToTarget.sqrMagnitude > 0.0001f)
+		{
+			directionalIndicator.transform.rotation = Quaternion.LookRotation(directionToTarget.normalized);
 		}
 	}
 
@@ -77,6 +170,8 @@ public class SavedItemFinderExample : MonoBehaviour
 			Debug.Log("No saved item named '" + itemName + "' was found.");
 			return;
 		}
+
+		currentTargetItem = item;
 
 		Debug.Log("Selected item: Name=" + item.itemName + ", Id=" + item.itemId + ", Position=" + item.lastKnownPosition + ", SavedAtUtc=" + item.savedAtUtc);
 		if (Camera.main != null)
