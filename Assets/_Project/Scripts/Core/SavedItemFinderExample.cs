@@ -12,10 +12,17 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh distanceText;
 	private GameObject directionalIndicator;
 	[SerializeField] private string testItemName = "Keys";
+	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
+	[SerializeField] private bool showDistanceText = true;
+	[SerializeField] private bool showDirectionalIndicator = false;
+	[SerializeField] private bool showTargetMarker = false;
 	private bool wasLeftTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
 	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
+	// Temporary XR runtime material fix for primitives created at runtime.
+	[SerializeField] private Material targetMarkerMaterial;
+	[SerializeField] private Material directionalIndicatorMaterial;
 
 	private void Start()
 	{
@@ -69,20 +76,45 @@ public class SavedItemFinderExample : MonoBehaviour
 			SpawnOneSavedItemByName(testItemName);
 		}
 
+		if (!showDistanceText && distanceText != null)
+		{
+			distanceText.gameObject.SetActive(false);
+		}
+
+		if (!showDirectionalIndicator && directionalIndicator != null)
+		{
+			directionalIndicator.SetActive(false);
+		}
+
+		if (!showTargetMarker && spawnedMarkers.Count > 0)
+		{
+			ClearSpawnedMarkers();
+		}
+
 		if (currentTargetItem != null && Camera.main != null)
 		{
-			EnsureDistanceText();
-			distanceText.gameObject.SetActive(true);
-			UpdateDistanceTextTransform();
-			EnsureDirectionalIndicator();
-			directionalIndicator.SetActive(true);
-			UpdateDirectionalIndicatorTransform();
+			if (showDistanceText)
+			{
+				EnsureDistanceText();
+				distanceText.gameObject.SetActive(true);
+				UpdateDistanceTextTransform();
+			}
+
+			if (showDirectionalIndicator)
+			{
+				EnsureDirectionalIndicator();
+				directionalIndicator.SetActive(true);
+				UpdateDirectionalIndicatorTransform();
+			}
 
 			float distanceToItem = Vector3.Distance(Camera.main.transform.position, currentTargetItem.lastKnownPosition);
 
 			// Draw every frame so the guidance line stays visible while in find mode.
 			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
-			distanceText.text = "Distance: " + distanceToItem.ToString("F2") + " m";
+			if (showDistanceText && distanceText != null)
+			{
+				distanceText.text = "Distance: " + distanceToItem.ToString("F2") + " m";
+			}
 
 			if (Time.time >= nextDistanceLogTime)
 			{
@@ -90,9 +122,12 @@ public class SavedItemFinderExample : MonoBehaviour
 				nextDistanceLogTime = Time.time + 1f;
 			}
 		}
-		else if (distanceText != null)
+		else
 		{
-			distanceText.gameObject.SetActive(false);
+			if (distanceText != null)
+			{
+				distanceText.gameObject.SetActive(false);
+			}
 
 			if (directionalIndicator != null)
 			{
@@ -147,6 +182,15 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		directionalIndicator = GameObject.CreatePrimitive(PrimitiveType.Cube);
+		// Temporary XR runtime material fix for directional indicator primitive.
+		if (directionalIndicatorMaterial != null)
+		{
+			Renderer renderer = directionalIndicator.GetComponent<Renderer>();
+			if (renderer != null)
+			{
+				renderer.sharedMaterial = directionalIndicatorMaterial;
+			}
+		}
 		directionalIndicator.name = "DirectionalIndicator";
 		if (Camera.main != null)
 		{
@@ -192,6 +236,12 @@ public class SavedItemFinderExample : MonoBehaviour
 			return;
 		}
 
+		if (!showTargetMarker)
+		{
+			Debug.Log("Target marker visuals are disabled for XR debugging.");
+			return;
+		}
+
 		for (int i = 0; i < items.Count; i++)
 		{
 			SavedItemData item = items[i];
@@ -225,8 +275,11 @@ public class SavedItemFinderExample : MonoBehaviour
 			Debug.DrawLine(Camera.main.transform.position, item.lastKnownPosition, Color.red, 5f);
 		}
 
-		SpawnMarkerForItem(item);
-		Debug.Log("Spawned marker for item: " + item.itemName);
+		if (showTargetMarker)
+		{
+			SpawnMarkerForItem(item);
+			Debug.Log("Spawned marker for item: " + item.itemName);
+		}
 	}
 
 	private void EnsureSpawnedMarkersParent()
@@ -247,6 +300,15 @@ public class SavedItemFinderExample : MonoBehaviour
 	private void SpawnMarkerForItem(SavedItemData item)
 	{
 		GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+		// Temporary XR runtime material fix for target marker primitive.
+		if (targetMarkerMaterial != null)
+		{
+			Renderer renderer = marker.GetComponent<Renderer>();
+			if (renderer != null)
+			{
+				renderer.sharedMaterial = targetMarkerMaterial;
+			}
+		}
 		marker.transform.SetParent(spawnedMarkersParent, true);
 		marker.transform.position = item.lastKnownPosition;
 		marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);

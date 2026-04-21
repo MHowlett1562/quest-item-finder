@@ -48,7 +48,7 @@ public class SavedItemExample : MonoBehaviour
         savedItem.itemName = "Keys";
         if (Camera.main != null)
         {
-            savedItem.lastKnownPosition = Camera.main.transform.position + (Camera.main.transform.forward * 2f);
+            savedItem.lastKnownPosition = Camera.main.transform.position + (Camera.main.transform.forward * 4f);
         }
         else
         {
