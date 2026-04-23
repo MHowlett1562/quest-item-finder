@@ -334,6 +334,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!4 &1217560441 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8718302446126152263, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
+  m_PrefabInstance: {fileID: 1610979296}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1415189428
 GameObject:
   m_ObjectHideFlags: 0
@@ -363,6 +368,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09c0eff3dbaf8934ab44ba2c5d52dd70, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rightControllerTransform: {fileID: 1217560441}
+  showAimMarker: 1
+  aimMarkerMaterial: {fileID: 2100000, guid: 727f87098255ad04987a60f5f08390bc, type: 2}
+  controllerSaveDistance: 1
+  fallbackDistanceFromCamera: 2
 --- !u!4 &1415189430
 Transform:
   m_ObjectHideFlags: 0

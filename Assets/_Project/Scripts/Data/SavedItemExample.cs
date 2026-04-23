@@ -7,6 +7,17 @@ public class SavedItemExample : MonoBehaviour
 	private SavedItemManager savedItemManager;
     private bool wasRightTriggerPressed;
     private TextMesh saveFeedbackText;
+    
+    // Save Placement UX improvement: optional scene reference for right controller ray origin.
+    [SerializeField] private Transform rightControllerTransform;
+    // Save Placement UX improvement: optional visual marker for current controller hit point.
+    [SerializeField] private bool showAimMarker = true;
+    [SerializeField] private Material aimMarkerMaterial;
+    // Save Placement UX MVP refinement: save point is projected forward from the controller by this distance.
+    [SerializeField] private float controllerSaveDistance = 1.0f;
+    [SerializeField] private float fallbackDistanceFromCamera = 2f;
+    
+    private GameObject aimMarker;
 
     private void Start()
     {
@@ -31,6 +42,8 @@ public class SavedItemExample : MonoBehaviour
             rightHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out rightTriggerPressed);
         }
 
+        UpdateAimMarker(rightTriggerPressed);
+
         bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
         wasRightTriggerPressed = rightTriggerPressed;
 
@@ -48,14 +61,7 @@ public class SavedItemExample : MonoBehaviour
         SavedItemData savedItem = new SavedItemData();
         savedItem.itemId = System.Guid.NewGuid().ToString();
         savedItem.itemName = "Keys";
-        if (Camera.main != null)
-        {
-            savedItem.lastKnownPosition = Camera.main.transform.position + (Camera.main.transform.forward * 4f);
-        }
-        else
-        {
-            savedItem.lastKnownPosition = transform.position;
-        }
+        savedItem.lastKnownPosition = GetSavePlacementPosition();
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
 
         savedItemManager.AddItem(savedItem);
@@ -64,6 +70,71 @@ public class SavedItemExample : MonoBehaviour
         ShowTemporarySaveFeedback();
 
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
+    }
+
+    private Vector3 GetSavePlacementPosition()
+    {
+        // Save Placement UX MVP refinement: place the save point directly in front of the assigned right controller.
+        if (rightControllerTransform != null)
+        {
+            return rightControllerTransform.position + (rightControllerTransform.forward * controllerSaveDistance);
+        }
+
+        // Save Placement UX MVP refinement: fallback to camera-forward only when no controller transform is assigned.
+        if (Camera.main != null)
+        {
+            return Camera.main.transform.position + (Camera.main.transform.forward * fallbackDistanceFromCamera);
+        }
+
+        return transform.position;
+    }
+
+    private void UpdateAimMarker(bool rightTriggerPressed)
+    {
+        if (!showAimMarker)
+        {
+            return;
+        }
+
+        if (aimMarker == null)
+        {
+            // Save Placement UX improvement: tiny sphere preview for controller hit point.
+            aimMarker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            aimMarker.name = "SaveAimMarker";
+            aimMarker.transform.localScale = Vector3.one * 0.05f;
+
+            // Fix for XR stereo rendering / missing material issue.
+            if (aimMarkerMaterial != null)
+            {
+                Renderer markerRenderer = aimMarker.GetComponent<Renderer>();
+                if (markerRenderer != null)
+                {
+                    markerRenderer.sharedMaterial = aimMarkerMaterial;
+                }
+            }
+
+            Collider markerCollider = aimMarker.GetComponent<Collider>();
+            if (markerCollider != null)
+            {
+                markerCollider.enabled = false;
+            }
+        }
+
+        if (!rightTriggerPressed)
+        {
+            aimMarker.SetActive(false);
+            return;
+        }
+
+        // Save Placement UX MVP refinement: preview the same position that will be used for save.
+        if (rightControllerTransform != null)
+        {
+            aimMarker.transform.position = rightControllerTransform.position + (rightControllerTransform.forward * controllerSaveDistance);
+            aimMarker.SetActive(true);
+            return;
+        }
+
+        aimMarker.SetActive(false);
     }
 
     private void ShowTemporarySaveFeedback()
