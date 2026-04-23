@@ -18,6 +18,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] private bool showTargetMarker = false;
 	private bool wasLeftTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
+	// Find Mode toggle UX improvement: true while single-item find mode is actively guiding to one item.
+	private bool isSingleItemFindModeActive;
 	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
 	// Temporary XR runtime material fix for primitives created at runtime.
@@ -73,7 +75,16 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 		else if (Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame)
 		{
-			SpawnOneSavedItemByName(testItemName);
+			// Find Mode toggle UX improvement: G/left trigger now toggles single-item find mode on/off.
+			if (!isSingleItemFindModeActive)
+			{
+				SpawnOneSavedItemByName(testItemName);
+				isSingleItemFindModeActive = currentTargetItem != null;
+			}
+			else
+			{
+				DisableSingleItemFindMode();
+			}
 		}
 
 		if (!showDistanceText && distanceText != null)
@@ -295,6 +306,24 @@ public class SavedItemFinderExample : MonoBehaviour
 
 			spawnedMarkersParent = parentObject.transform;
 		}
+	}
+
+	private void DisableSingleItemFindMode()
+	{
+		isSingleItemFindModeActive = false;
+		currentTargetItem = null;
+
+		if (distanceText != null)
+		{
+			distanceText.gameObject.SetActive(false);
+		}
+
+		if (directionalIndicator != null)
+		{
+			directionalIndicator.SetActive(false);
+		}
+
+		ClearSpawnedMarkers();
 	}
 
 	private void SpawnMarkerForItem(SavedItemData item)

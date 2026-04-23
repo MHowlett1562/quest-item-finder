@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.XR;
+using System.Collections;
 
 public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
     private bool wasRightTriggerPressed;
+    private TextMesh saveFeedbackText;
 
     private void Start()
     {
@@ -59,6 +61,48 @@ public class SavedItemExample : MonoBehaviour
         savedItemManager.AddItem(savedItem);
         savedItemManager.SaveData();
 
+        ShowTemporarySaveFeedback();
+
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
+    }
+
+    private void ShowTemporarySaveFeedback()
+    {
+        if (Camera.main == null)
+        {
+            return;
+        }
+
+        // Temporary save feedback UX: show a short floating message after save.
+        if (saveFeedbackText == null)
+        {
+            GameObject saveFeedbackObject = new GameObject("SaveFeedbackText");
+            saveFeedbackText = saveFeedbackObject.AddComponent<TextMesh>();
+            saveFeedbackText.fontSize = 64;
+            saveFeedbackText.characterSize = 0.01f;
+            saveFeedbackText.anchor = TextAnchor.MiddleCenter;
+            saveFeedbackText.alignment = TextAlignment.Center;
+            saveFeedbackText.color = Color.white;
+        }
+
+        saveFeedbackText.transform.SetParent(Camera.main.transform, false);
+        saveFeedbackText.transform.localPosition = new Vector3(0f, -0.1f, 1.2f);
+        saveFeedbackText.transform.localRotation = Quaternion.identity;
+        saveFeedbackText.text = "Item Saved";
+        saveFeedbackText.gameObject.SetActive(true);
+
+        StopCoroutine("HideSaveFeedbackAfterDelay");
+        StartCoroutine("HideSaveFeedbackAfterDelay");
+    }
+
+    private IEnumerator HideSaveFeedbackAfterDelay()
+    {
+        // Temporary save feedback UX: auto-hide after a short delay.
+        yield return new WaitForSeconds(2f);
+
+        if (saveFeedbackText != null)
+        {
+            saveFeedbackText.gameObject.SetActive(false);
+        }
     }
 }
