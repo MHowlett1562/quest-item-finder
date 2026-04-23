@@ -10,6 +10,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private SavedItemData currentTargetItem;
 	private float nextDistanceLogTime;
 	private TextMesh distanceText;
+	private TextMesh hudArrowText;
 	private GameObject directionalIndicator;
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
@@ -21,6 +22,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	// Find Mode toggle UX improvement: true while single-item find mode is actively guiding to one item.
 	private bool isSingleItemFindModeActive;
 	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
+	private static readonly Vector3 hudArrowLocalOffset = new Vector3(0f, -0.06f, 1.5f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
 	// Temporary XR runtime material fix for primitives created at runtime.
 	[SerializeField] private Material targetMarkerMaterial;
@@ -111,20 +113,25 @@ public class SavedItemFinderExample : MonoBehaviour
 				UpdateDistanceTextTransform();
 			}
 
-			if (showDirectionalIndicator)
-			{
-				EnsureDirectionalIndicator();
-				directionalIndicator.SetActive(true);
-				UpdateDirectionalIndicatorTransform();
-			}
+			// HUD arrow direction UX improvement: flat TextMesh arrow for quick passthrough readability.
+			EnsureHudArrowText();
+			hudArrowText.gameObject.SetActive(true);
+			UpdateHudArrowTextTransform();
 
 			float distanceToItem = Vector3.Distance(Camera.main.transform.position, currentTargetItem.lastKnownPosition);
+			// Direction UX improvement: replace rotating 3D indicator with simple text guidance.
+			string directionText = GetDirectionGuidanceText();
 
 			// Draw every frame so the guidance line stays visible while in find mode.
 			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
 			if (showDistanceText && distanceText != null)
 			{
-				distanceText.text = "Distance: " + distanceToItem.ToString("F2") + " m";
+				distanceText.text = "Distance: " + distanceToItem.ToString("F1") + "m\n" + directionText;
+			}
+
+			if (hudArrowText != null)
+			{
+				hudArrowText.text = GetDirectionArrowSymbol(directionText);
 			}
 
 			if (Time.time >= nextDistanceLogTime)
@@ -143,6 +150,11 @@ public class SavedItemFinderExample : MonoBehaviour
 			if (directionalIndicator != null)
 			{
 				directionalIndicator.SetActive(false);
+			}
+
+			if (hudArrowText != null)
+			{
+				hudArrowText.gameObject.SetActive(false);
 			}
 		}
 	}
@@ -185,50 +197,59 @@ public class SavedItemFinderExample : MonoBehaviour
 		distanceText.transform.localRotation = Quaternion.identity;
 	}
 
-	private void EnsureDirectionalIndicator()
+	private void EnsureHudArrowText()
 	{
-		if (directionalIndicator != null)
+		if (hudArrowText != null)
 		{
 			return;
 		}
 
-		directionalIndicator = GameObject.CreatePrimitive(PrimitiveType.Cube);
-		// Temporary XR runtime material fix for directional indicator primitive.
-		if (directionalIndicatorMaterial != null)
-		{
-			Renderer renderer = directionalIndicator.GetComponent<Renderer>();
-			if (renderer != null)
-			{
-				renderer.sharedMaterial = directionalIndicatorMaterial;
-			}
-		}
-		directionalIndicator.name = "DirectionalIndicator";
+		GameObject hudArrowTextObject = new GameObject("HudDirectionArrowText");
+		hudArrowText = hudArrowTextObject.AddComponent<TextMesh>();
 		if (Camera.main != null)
 		{
-			directionalIndicator.transform.SetParent(Camera.main.transform, false);
-			directionalIndicator.transform.localPosition = directionalIndicatorLocalOffset;
+			hudArrowText.transform.SetParent(Camera.main.transform, false);
+			hudArrowText.transform.localPosition = hudArrowLocalOffset;
+			hudArrowText.transform.localRotation = Quaternion.identity;
 		}
-		directionalIndicator.transform.localScale = new Vector3(0.05f, 0.05f, 0.15f);
+		hudArrowText.fontSize = 72;
+		hudArrowText.characterSize = 0.012f;
+		hudArrowText.anchor = TextAnchor.MiddleCenter;
+		hudArrowText.alignment = TextAlignment.Center;
+		hudArrowText.color = Color.white;
+	}
+
+	private void UpdateHudArrowTextTransform()
+	{
+		if (hudArrowText == null || Camera.main == null)
+		{
+			return;
+		}
+
+		if (hudArrowText.transform.parent != Camera.main.transform)
+		{
+			hudArrowText.transform.SetParent(Camera.main.transform, false);
+		}
+
+		hudArrowText.transform.localPosition = hudArrowLocalOffset;
+		hudArrowText.transform.localRotation = Quaternion.identity;
+	}
+
+	private void EnsureDirectionalIndicator()
+	{
+		// Direction UX improvement: 3D directional indicator is disabled in favor of text guidance.
+		if (directionalIndicator != null)
+		{
+			directionalIndicator.SetActive(false);
+		}
 	}
 
 	private void UpdateDirectionalIndicatorTransform()
 	{
-		if (directionalIndicator == null || currentTargetItem == null || Camera.main == null)
+		// Direction UX improvement: 3D directional indicator is disabled in favor of text guidance.
+		if (directionalIndicator != null)
 		{
-			return;
-		}
-
-		if (directionalIndicator.transform.parent != Camera.main.transform)
-		{
-			directionalIndicator.transform.SetParent(Camera.main.transform, false);
-		}
-
-		directionalIndicator.transform.localPosition = directionalIndicatorLocalOffset;
-
-		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - directionalIndicator.transform.position;
-		if (directionToTarget.sqrMagnitude > 0.0001f)
-		{
-			directionalIndicator.transform.rotation = Quaternion.LookRotation(directionToTarget.normalized);
+			directionalIndicator.SetActive(false);
 		}
 	}
 
@@ -260,6 +281,71 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		Debug.Log("Spawned " + spawnedMarkers.Count + " marker(s).");
+	}
+
+	private string GetDirectionGuidanceText()
+	{
+		if (currentTargetItem == null || Camera.main == null)
+		{
+			return "Ahead";
+		}
+
+		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
+		directionToTarget.y = 0f;
+
+		if (directionToTarget.sqrMagnitude < 0.0001f)
+		{
+			return "Ahead";
+		}
+
+		directionToTarget.Normalize();
+
+		Vector3 cameraForward = Camera.main.transform.forward;
+		cameraForward.y = 0f;
+		if (cameraForward.sqrMagnitude < 0.0001f)
+		{
+			return "Ahead";
+		}
+		cameraForward.Normalize();
+
+		Vector3 cameraRight = Camera.main.transform.right;
+		cameraRight.y = 0f;
+		if (cameraRight.sqrMagnitude < 0.0001f)
+		{
+			return "Ahead";
+		}
+		cameraRight.Normalize();
+
+		float forwardDot = Vector3.Dot(cameraForward, directionToTarget);
+		float rightDot = Vector3.Dot(cameraRight, directionToTarget);
+
+		// Direction UX improvement: dead zone keeps guidance stable and easy to read.
+		if (forwardDot > 0.35f || Mathf.Abs(rightDot) < 0.2f)
+		{
+			return "Ahead";
+		}
+
+		if (rightDot < 0f)
+		{
+			return "Turn Left";
+		}
+
+		return "Turn Right";
+	}
+
+	private string GetDirectionArrowSymbol(string directionText)
+	{
+		if (directionText == "Turn Left")
+		{
+			return "\u2190";
+		}
+
+		if (directionText == "Turn Right")
+		{
+			return "\u2192";
+		}
+
+		return "\u2191";
 	}
 
 	private void SpawnOneSavedItemByName(string itemName)
@@ -321,6 +407,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (directionalIndicator != null)
 		{
 			directionalIndicator.SetActive(false);
+		}
+
+		if (hudArrowText != null)
+		{
+			hudArrowText.gameObject.SetActive(false);
 		}
 
 		ClearSpawnedMarkers();
