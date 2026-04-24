@@ -9,6 +9,7 @@ public class SavedItemExample : MonoBehaviour
     private bool wasRightPrimaryButtonPressed;
     private bool wasRightSecondaryButtonPressed;
     private TextMesh saveFeedbackText;
+    private LineRenderer controllerRayLine;
 
     // MVP input conflict cleanup: expose whether save-name menu is open so other scripts can gate shared inputs.
     public bool IsNameSelectionMenuOpen => isNameSelectionMenuOpen;
@@ -31,6 +32,7 @@ public class SavedItemExample : MonoBehaviour
     // Save Placement UX MVP refinement: save point is projected forward from the controller by this distance.
     [SerializeField] private float controllerSaveDistance = 1.0f;
     [SerializeField] private float fallbackDistanceFromCamera = 2f;
+    [SerializeField] private float controllerRayWidth = 0.0075f;
     private static readonly Vector3 nameSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.2f);
     
     private GameObject aimMarker;
@@ -63,8 +65,10 @@ public class SavedItemExample : MonoBehaviour
         }
 
         UpdateAimMarker(rightTriggerPressed);
+		UpdateControllerRayVisual();
 
         bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
+        bool rightTriggerReleasedThisFrame = !rightTriggerPressed && wasRightTriggerPressed;
         bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
         bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
@@ -79,8 +83,9 @@ public class SavedItemExample : MonoBehaviour
         }
 
         bool saveInputPressedThisFrame = Input.GetKeyDown(KeyCode.K) || rightTriggerPressedThisFrame;
+        bool saveInputReleasedThisFrame = Input.GetKeyUp(KeyCode.K) || rightTriggerReleasedThisFrame;
 
-        if (!saveInputPressedThisFrame)
+        if (!saveInputPressedThisFrame && !saveInputReleasedThisFrame)
         {
             return;
         }
@@ -91,9 +96,14 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
-        if (!isNameSelectionMenuOpen)
+        if (saveInputPressedThisFrame && !isNameSelectionMenuOpen)
         {
             ShowNameSelectionMenu();
+            return;
+        }
+
+        if (!saveInputReleasedThisFrame || !isNameSelectionMenuOpen)
+        {
             return;
         }
 
@@ -184,6 +194,13 @@ public class SavedItemExample : MonoBehaviour
         {
             nameSelectionMenuText.gameObject.SetActive(false);
         }
+
+        if (aimMarker != null)
+        {
+            aimMarker.SetActive(false);
+        }
+
+        DisableControllerRayVisual();
     }
 
     private void HandleNameSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
@@ -224,7 +241,7 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
-        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRight Trigger to save";
+        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRelease Trigger to save";
     }
 
     private string GetSelectedNameForSave()
@@ -273,6 +290,7 @@ public class SavedItemExample : MonoBehaviour
     {
         if (!showAimMarker)
         {
+            DisableControllerRayVisual();
             return;
         }
 
@@ -315,6 +333,85 @@ public class SavedItemExample : MonoBehaviour
         }
 
         aimMarker.SetActive(false);
+    }
+
+    private void EnsureControllerRayLine()
+    {
+        if (controllerRayLine != null)
+        {
+            return;
+        }
+
+        // Controller ray visual polish: runtime line renderer for save aiming.
+        GameObject controllerRayObject = new GameObject("SaveControllerRay");
+        controllerRayLine = controllerRayObject.AddComponent<LineRenderer>();
+        controllerRayLine.positionCount = 2;
+        controllerRayLine.startWidth = controllerRayWidth;
+        controllerRayLine.endWidth = controllerRayWidth;
+        controllerRayLine.useWorldSpace = true;
+        controllerRayLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        controllerRayLine.receiveShadows = false;
+        controllerRayLine.numCapVertices = 4;
+        controllerRayLine.startColor = Color.cyan;
+        controllerRayLine.endColor = Color.cyan;
+
+        Shader rayShader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (rayShader == null)
+        {
+            rayShader = Shader.Find("Unlit/Color");
+        }
+        if (rayShader == null)
+        {
+            rayShader = Shader.Find("Sprites/Default");
+        }
+        if (rayShader == null)
+        {
+            rayShader = Shader.Find("Standard");
+        }
+
+        if (rayShader != null)
+        {
+            Material rayMaterial = new Material(rayShader);
+            rayMaterial.color = Color.cyan;
+            controllerRayLine.sharedMaterial = rayMaterial;
+        }
+
+        controllerRayLine.enabled = false;
+    }
+
+    private void UpdateControllerRayVisual()
+    {
+        bool shouldShowRay = isNameSelectionMenuOpen && showAimMarker && rightControllerTransform != null;
+        if (!shouldShowRay)
+        {
+            DisableControllerRayVisual();
+            return;
+        }
+
+        EnsureControllerRayLine();
+
+        Vector3 rayStart = rightControllerTransform.position;
+        Vector3 rayDirection = rightControllerTransform.forward;
+        Vector3 rayEnd = rayStart + (rayDirection * controllerSaveDistance);
+
+        // Controller ray visual polish: use a simple Physics raycast for the visible end point only.
+        RaycastHit hit;
+        if (Physics.Raycast(rayStart, rayDirection, out hit, controllerSaveDistance))
+        {
+            rayEnd = hit.point;
+        }
+
+        controllerRayLine.enabled = true;
+        controllerRayLine.SetPosition(0, rayStart);
+        controllerRayLine.SetPosition(1, rayEnd);
+    }
+
+    private void DisableControllerRayVisual()
+    {
+        if (controllerRayLine != null)
+        {
+            controllerRayLine.enabled = false;
+        }
     }
 
     private void ShowTemporarySaveFeedback(string message)
