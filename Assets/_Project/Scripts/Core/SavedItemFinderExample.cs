@@ -701,24 +701,114 @@ public class SavedItemFinderExample : MonoBehaviour
 		ShowTemporaryItemSelectionMessage("Saved items cleared");
 	}
 
+	private Material CreateUnlitRedMaterial()
+	{
+		// Waypoint marker visual polish: create runtime unlit red material with URP transparency and fallback chain.
+		Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+		if (shader == null)
+		{
+			shader = Shader.Find("Unlit/Color");
+		}
+		if (shader == null)
+		{
+			shader = Shader.Find("Standard");
+		}
+
+		Material material = new Material(shader);
+		material.color = new Color(1f, 0.2f, 0.2f, 0.8f);
+
+		// URP transparency settings if using URP shader.
+		if (shader.name.Contains("URP") || shader.name.Contains("Universal"))
+		{
+			material.SetFloat("_Surface", 1);
+			material.SetFloat("_Blend", 0);
+			material.SetOverrideTag("RenderType", "Transparent");
+			material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+		}
+
+		return material;
+	}
+
+	private Material CreateUnlitWhiteMaterial()
+	{
+		// Waypoint marker visual polish: create runtime unlit white material with fallback chain.
+		Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+		if (shader == null)
+		{
+			shader = Shader.Find("Unlit/Color");
+		}
+		if (shader == null)
+		{
+			shader = Shader.Find("Standard");
+		}
+
+		Material material = new Material(shader);
+		material.color = Color.white;
+		return material;
+	}
+
 	private void SpawnMarkerForItem(SavedItemData item)
 	{
-		GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-		// Temporary XR runtime material fix for target marker primitive.
-		if (targetMarkerMaterial != null)
-		{
-			Renderer renderer = marker.GetComponent<Renderer>();
-			if (renderer != null)
-			{
-				renderer.sharedMaterial = targetMarkerMaterial;
-			}
-		}
-		marker.transform.SetParent(spawnedMarkersParent, true);
-		marker.transform.position = item.lastKnownPosition;
-		marker.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-		marker.name = item.itemName + " Marker";
+		// Waypoint marker visual polish: clean 3D map pin with tapered drop.
+		GameObject waypointMarker = new GameObject(item.itemName + " Waypoint Marker");
+		waypointMarker.transform.SetParent(spawnedMarkersParent, true);
+		waypointMarker.transform.position = item.lastKnownPosition;
 
-		spawnedMarkers.Add(marker);
+		Material redMaterial = CreateUnlitRedMaterial();
+		Material whiteMaterial = CreateUnlitWhiteMaterial();
+
+		// Red sphere head (0.18m).
+		GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+		sphere.name = "WaypointSphere";
+		sphere.transform.SetParent(waypointMarker.transform, false);
+		sphere.transform.localPosition = Vector3.zero;
+		sphere.transform.localScale = new Vector3(0.18f, 0.18f, 0.18f);
+		Renderer sphereRenderer = sphere.GetComponent<Renderer>();
+		if (sphereRenderer != null)
+		{
+			sphereRenderer.sharedMaterial = redMaterial;
+		}
+		Collider sphereCollider = sphere.GetComponent<Collider>();
+		if (sphereCollider != null)
+		{
+			sphereCollider.enabled = false;
+		}
+
+		// Small white center dot for clarity (0.05m).
+		GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+		dot.name = "WaypointDot";
+		dot.transform.SetParent(waypointMarker.transform, false);
+		dot.transform.localPosition = Vector3.zero;
+		dot.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+		Renderer dotRenderer = dot.GetComponent<Renderer>();
+		if (dotRenderer != null)
+		{
+			dotRenderer.sharedMaterial = whiteMaterial;
+		}
+		Collider dotCollider = dot.GetComponent<Collider>();
+		if (dotCollider != null)
+		{
+			dotCollider.enabled = false;
+		}
+
+		// Tapered red drop point below (narrow capsule).
+		GameObject drop = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+		drop.name = "WaypointDrop";
+		drop.transform.SetParent(waypointMarker.transform, false);
+		drop.transform.localPosition = new Vector3(0f, -0.16f, 0f);
+		drop.transform.localScale = new Vector3(0.04f, 0.18f, 0.04f);
+		Renderer dropRenderer = drop.GetComponent<Renderer>();
+		if (dropRenderer != null)
+		{
+			dropRenderer.sharedMaterial = redMaterial;
+		}
+		Collider dropCollider = drop.GetComponent<Collider>();
+		if (dropCollider != null)
+		{
+			dropCollider.enabled = false;
+		}
+
+		spawnedMarkers.Add(waypointMarker);
 	}
 
 	private void ClearSpawnedMarkers()
@@ -734,3 +824,4 @@ public class SavedItemFinderExample : MonoBehaviour
 		spawnedMarkers.Clear();
 	}
 }
+
