@@ -148,7 +148,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8f00224f4cada884293159b968fe3343, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testItemName: Keys
+  testItemName: Wallet
   showDistanceText: 1
   showDirectionalIndicator: 1
   showTargetMarker: 1
@@ -368,6 +368,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09c0eff3dbaf8934ab44ba2c5d52dd70, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  testItemName: Wallet
   rightControllerTransform: {fileID: 1217560441}
   showAimMarker: 1
   aimMarkerMaterial: {fileID: 2100000, guid: 727f87098255ad04987a60f5f08390bc, type: 2}

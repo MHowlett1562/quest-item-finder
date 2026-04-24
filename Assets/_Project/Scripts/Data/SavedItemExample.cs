@@ -8,6 +8,9 @@ public class SavedItemExample : MonoBehaviour
     private bool wasRightTriggerPressed;
     private TextMesh saveFeedbackText;
     
+    // MVP naming feedback: item name set in the Inspector for testing without a keyboard.
+    [SerializeField] private string testItemName = "Keys";
+
     // Save Placement UX improvement: optional scene reference for right controller ray origin.
     [SerializeField] private Transform rightControllerTransform;
     // Save Placement UX improvement: optional visual marker for current controller hit point.
@@ -58,16 +61,35 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
+        // MVP naming feedback: resolve the item name with fallback to "Unnamed Item".
+        string resolvedName = string.IsNullOrWhiteSpace(testItemName) ? "Unnamed Item" : testItemName;
+
         SavedItemData savedItem = new SavedItemData();
         savedItem.itemId = System.Guid.NewGuid().ToString();
-        savedItem.itemName = "Keys";
+        savedItem.itemName = resolvedName;
         savedItem.lastKnownPosition = GetSavePlacementPosition();
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+
+        // MVP naming feedback: check for a duplicate name before saving.
+        bool isDuplicate = false;
+        System.Collections.Generic.List<SavedItemData> existingItems = savedItemManager.GetAllItems();
+        for (int i = 0; i < existingItems.Count; i++)
+        {
+            if (existingItems[i] != null && existingItems[i].itemName == resolvedName)
+            {
+                isDuplicate = true;
+                break;
+            }
+        }
 
         savedItemManager.AddItem(savedItem);
         savedItemManager.SaveData();
 
-        ShowTemporarySaveFeedback();
+        // MVP naming feedback: show "Saved duplicate" when the name already existed.
+        string feedbackMessage = isDuplicate
+            ? "Saved duplicate: " + resolvedName
+            : "Saved: " + resolvedName;
+        ShowTemporarySaveFeedback(feedbackMessage);
 
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
     }
@@ -137,7 +159,7 @@ public class SavedItemExample : MonoBehaviour
         aimMarker.SetActive(false);
     }
 
-    private void ShowTemporarySaveFeedback()
+    private void ShowTemporarySaveFeedback(string message)
     {
         if (Camera.main == null)
         {
@@ -159,7 +181,7 @@ public class SavedItemExample : MonoBehaviour
         saveFeedbackText.transform.SetParent(Camera.main.transform, false);
         saveFeedbackText.transform.localPosition = new Vector3(0f, -0.1f, 1.2f);
         saveFeedbackText.transform.localRotation = Quaternion.identity;
-        saveFeedbackText.text = "Item Saved";
+        saveFeedbackText.text = message;
         saveFeedbackText.gameObject.SetActive(true);
 
         StopCoroutine("HideSaveFeedbackAfterDelay");
