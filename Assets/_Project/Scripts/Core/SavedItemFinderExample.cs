@@ -14,7 +14,12 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh hudArrowText;
 	private TextMesh itemSelectionMenuText;
 	private GameObject directionalIndicator;
-	private SavedItemExample savedItemExample;
+	[SerializeField] private SavedItemExample savedItemExample;
+
+	// Symmetric UI state conflict cleanup: expose read-only find UI state for other scripts.
+	public bool IsFindItemSelectionMenuOpen => isItemSelectionMenuActive;
+	public bool IsFindModeActive => isSingleItemFindModeActive;
+
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
 	[SerializeField] private bool showDistanceText = true;
@@ -48,7 +53,10 @@ public class SavedItemFinderExample : MonoBehaviour
 	private void Start()
 	{
 		savedItemManager = FindFirstObjectByType<SavedItemManager>();
-		savedItemExample = FindFirstObjectByType<SavedItemExample>();
+		if (savedItemExample == null)
+		{
+			savedItemExample = FindFirstObjectByType<SavedItemExample>();
+		}
 
 		if (savedItemManager != null)
 		{
@@ -106,6 +114,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
 		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame))
 		{
+			if (isSaveNameMenuOpen)
+			{
+				savedItemExample.CancelNameSelectionMenu();
+			}
+
 			HideItemSelectionMenu();
 			currentTargetItem = null;
 			SpawnAllSavedItems();
@@ -119,6 +132,12 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		if (findInputPressedThisFrame)
 		{
+			if (isSaveNameMenuOpen)
+			{
+				// UI state conflict cleanup: close save UI before opening find UI.
+				savedItemExample.CancelNameSelectionMenu();
+			}
+
 			// Find Mode toggle UX improvement: G/left trigger now toggles single-item find mode on/off.
 			if (isSingleItemFindModeActive)
 			{
@@ -667,6 +686,12 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		ClearSpawnedMarkers();
+	}
+
+	public void CancelFindModeAndMenu()
+	{
+		// Symmetric UI state conflict cleanup: close find menu/find mode UI without changing saved data.
+		DisableSingleItemFindMode();
 	}
 
 	private void UpdateControllerClearAllHold(bool rightPrimaryButtonPressed, bool rightSecondaryButtonPressed)

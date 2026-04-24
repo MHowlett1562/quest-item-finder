@@ -5,6 +5,7 @@ using System.Collections;
 public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
+	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
     private bool wasRightTriggerPressed;
     private bool wasRightPrimaryButtonPressed;
     private bool wasRightSecondaryButtonPressed;
@@ -41,6 +42,11 @@ public class SavedItemExample : MonoBehaviour
     {
         savedItemManager = FindFirstObjectByType<SavedItemManager>();
 
+		if (savedItemFinderExample == null)
+		{
+			savedItemFinderExample = FindFirstObjectByType<SavedItemFinderExample>();
+		}
+
         if (savedItemManager != null)
         {
             savedItemManager.LoadData();
@@ -68,7 +74,6 @@ public class SavedItemExample : MonoBehaviour
 		UpdateControllerRayVisual();
 
         bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
-        bool rightTriggerReleasedThisFrame = !rightTriggerPressed && wasRightTriggerPressed;
         bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
         bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
@@ -83,9 +88,8 @@ public class SavedItemExample : MonoBehaviour
         }
 
         bool saveInputPressedThisFrame = Input.GetKeyDown(KeyCode.K) || rightTriggerPressedThisFrame;
-        bool saveInputReleasedThisFrame = Input.GetKeyUp(KeyCode.K) || rightTriggerReleasedThisFrame;
 
-        if (!saveInputPressedThisFrame && !saveInputReleasedThisFrame)
+        if (!saveInputPressedThisFrame)
         {
             return;
         }
@@ -98,12 +102,19 @@ public class SavedItemExample : MonoBehaviour
 
         if (saveInputPressedThisFrame && !isNameSelectionMenuOpen)
         {
+            // Symmetric UI state conflict cleanup: close find UI before opening save UI.
+            if (savedItemFinderExample != null && (savedItemFinderExample.IsFindItemSelectionMenuOpen || savedItemFinderExample.IsFindModeActive))
+            {
+                savedItemFinderExample.CancelFindModeAndMenu();
+            }
+
             ShowNameSelectionMenu();
             return;
         }
 
-        if (!saveInputReleasedThisFrame || !isNameSelectionMenuOpen)
+        if (!isNameSelectionMenuOpen)
         {
+            ShowNameSelectionMenu();
             return;
         }
 
@@ -203,6 +214,12 @@ public class SavedItemExample : MonoBehaviour
         DisableControllerRayVisual();
     }
 
+    public void CancelNameSelectionMenu()
+    {
+        // UI state conflict cleanup: close save UI visuals without saving anything.
+        HideNameSelectionMenu();
+    }
+
     private void HandleNameSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
     {
         if (!isNameSelectionMenuOpen || presetItemNames == null || presetItemNames.Length == 0)
@@ -241,7 +258,7 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
-        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRelease Trigger to save";
+        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRight Trigger to save";
     }
 
     private string GetSelectedNameForSave()
@@ -318,7 +335,8 @@ public class SavedItemExample : MonoBehaviour
             }
         }
 
-        if (!rightTriggerPressed)
+        bool shouldShowAimMarker = isNameSelectionMenuOpen || rightTriggerPressed;
+        if (!shouldShowAimMarker)
         {
             aimMarker.SetActive(false);
             return;
