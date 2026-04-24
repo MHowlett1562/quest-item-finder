@@ -22,6 +22,10 @@ public class SavedItemFinderExample : MonoBehaviour
 	private bool wasLeftTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
 	private bool wasRightSecondaryButtonPressed;
+	// Temporary MVP controller debug cleanup: track deliberate A+B hold before clearing saved data.
+	private float clearAllButtonsHoldTimer;
+	private bool wasClearAllHoldActive;
+	private const float clearAllHoldDurationSeconds = 2f;
 	// Find Mode toggle UX improvement: true while single-item find mode is actively guiding to one item.
 	private bool isSingleItemFindModeActive;
 	// MVP item selection UI: active while user is choosing which item to find.
@@ -85,6 +89,14 @@ public class SavedItemFinderExample : MonoBehaviour
 		wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
 
 		bool findInputPressedThisFrame = Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame;
+
+		if (Input.GetKeyDown(KeyCode.C))
+		{
+			HandleDebugClearAllSavedItems();
+			return;
+		}
+
+		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
 
 		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && rightPrimaryButtonPressedThisFrame))
 		{
@@ -644,6 +656,45 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		ClearSpawnedMarkers();
+	}
+
+	private void UpdateControllerClearAllHold(bool rightPrimaryButtonPressed, bool rightSecondaryButtonPressed)
+	{
+		// Temporary MVP controller debug cleanup: require a deliberate in-headset A+B hold to clear all data.
+		bool canUseControllerClearShortcut = !isItemSelectionMenuActive && !isSingleItemFindModeActive;
+		bool isClearHoldActive = canUseControllerClearShortcut && rightPrimaryButtonPressed && rightSecondaryButtonPressed;
+
+		if (isClearHoldActive)
+		{
+			if (!wasClearAllHoldActive)
+			{
+				Debug.Log("Controller clear-all hold started. Keep A+B pressed for 2 seconds.");
+			}
+
+			clearAllButtonsHoldTimer += Time.deltaTime;
+			if (clearAllButtonsHoldTimer >= clearAllHoldDurationSeconds)
+			{
+				Debug.Log("Controller clear-all hold complete. Clearing saved items.");
+				HandleDebugClearAllSavedItems();
+				clearAllButtonsHoldTimer = 0f;
+				wasClearAllHoldActive = false;
+				return;
+			}
+		}
+		else
+		{
+			clearAllButtonsHoldTimer = 0f;
+		}
+
+		wasClearAllHoldActive = isClearHoldActive;
+	}
+
+	private void HandleDebugClearAllSavedItems()
+	{
+		// Temporary MVP testing/debug cleanup feature: clear saved data and reset active find/menu visuals.
+		DisableSingleItemFindMode();
+		savedItemManager.ClearAllItems();
+		ShowTemporaryItemSelectionMessage("Saved items cleared");
 	}
 
 	private void SpawnMarkerForItem(SavedItemData item)

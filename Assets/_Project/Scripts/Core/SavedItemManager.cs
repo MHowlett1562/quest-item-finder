@@ -106,6 +106,14 @@ public class SavedItemManager : MonoBehaviour
 		}
 	}
 
+	public void ClearAllItems()
+	{
+		// Temporary MVP testing/debug cleanup feature: clear in-memory items and persist an empty save file.
+		savedItems.Clear();
+		SaveData();
+		Debug.Log("All saved items were cleared.");
+	}
+
 	public void SaveData()
 	{
 		string filePath = Path.Combine(Application.persistentDataPath, saveFileName);
