@@ -14,6 +14,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh hudArrowText;
 	private TextMesh itemSelectionMenuText;
 	private GameObject directionalIndicator;
+	private SavedItemExample savedItemExample;
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
 	[SerializeField] private bool showDistanceText = true;
@@ -45,6 +46,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private void Start()
 	{
 		savedItemManager = FindFirstObjectByType<SavedItemManager>();
+		savedItemExample = FindFirstObjectByType<SavedItemExample>();
 
 		if (savedItemManager != null)
 		{
@@ -98,7 +100,9 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
 
-		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && rightPrimaryButtonPressedThisFrame))
+		// MVP input conflict cleanup: reserve A/B for active menus by gating show-all while save-name menu is open.
+		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
+		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame))
 		{
 			HideItemSelectionMenu();
 			currentTargetItem = null;

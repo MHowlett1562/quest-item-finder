@@ -6,10 +6,22 @@ public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
     private bool wasRightTriggerPressed;
+    private bool wasRightPrimaryButtonPressed;
+    private bool wasRightSecondaryButtonPressed;
     private TextMesh saveFeedbackText;
+
+    // MVP input conflict cleanup: expose whether save-name menu is open so other scripts can gate shared inputs.
+    public bool IsNameSelectionMenuOpen => isNameSelectionMenuOpen;
+    private TextMesh nameSelectionMenuText;
+    // MVP preset name selection UI: true while preset-name menu is shown.
+    private bool isNameSelectionMenuOpen;
+    // MVP preset name selection UI: currently selected preset index in the name menu.
+    private int selectedPresetNameIndex;
     
     // MVP naming feedback: item name set in the Inspector for testing without a keyboard.
     [SerializeField] private string testItemName = "Keys";
+    // MVP preset name selection UI: simple preset names for headset-friendly item naming.
+    [SerializeField] private string[] presetItemNames = { "Keys", "Wallet", "Remote" };
 
     // Save Placement UX improvement: optional scene reference for right controller ray origin.
     [SerializeField] private Transform rightControllerTransform;
@@ -19,6 +31,7 @@ public class SavedItemExample : MonoBehaviour
     // Save Placement UX MVP refinement: save point is projected forward from the controller by this distance.
     [SerializeField] private float controllerSaveDistance = 1.0f;
     [SerializeField] private float fallbackDistanceFromCamera = 2f;
+    private static readonly Vector3 nameSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.2f);
     
     private GameObject aimMarker;
 
@@ -39,18 +52,35 @@ public class SavedItemExample : MonoBehaviour
     private void Update()
     {
         bool rightTriggerPressed = false;
+        bool rightPrimaryButtonPressed = false;
+        bool rightSecondaryButtonPressed = false;
         InputDevice rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         if (rightHandDevice.isValid)
         {
             rightHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out rightTriggerPressed);
+            rightHandDevice.TryGetFeatureValue(CommonUsages.primaryButton, out rightPrimaryButtonPressed);
+            rightHandDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out rightSecondaryButtonPressed);
         }
 
         UpdateAimMarker(rightTriggerPressed);
 
         bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
-        wasRightTriggerPressed = rightTriggerPressed;
+        bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
+        bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
-        if (!Input.GetKeyDown(KeyCode.K) && !rightTriggerPressedThisFrame)
+        wasRightTriggerPressed = rightTriggerPressed;
+        wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
+        wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
+
+        if (isNameSelectionMenuOpen)
+        {
+            UpdateNameSelectionMenuTransform();
+            HandleNameSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+        }
+
+        bool saveInputPressedThisFrame = Input.GetKeyDown(KeyCode.K) || rightTriggerPressedThisFrame;
+
+        if (!saveInputPressedThisFrame)
         {
             return;
         }
@@ -61,9 +91,16 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
-        // MVP naming feedback: resolve the item name with fallback to "Unnamed Item".
-        string resolvedName = string.IsNullOrWhiteSpace(testItemName) ? "Unnamed Item" : testItemName;
+        if (!isNameSelectionMenuOpen)
+        {
+            ShowNameSelectionMenu();
+            return;
+        }
 
+        string resolvedName = GetSelectedNameForSave();
+        HideNameSelectionMenu();
+
+        // MVP naming feedback: resolve the item name with fallback to "Unnamed Item".
         SavedItemData savedItem = new SavedItemData();
         savedItem.itemId = System.Guid.NewGuid().ToString();
         savedItem.itemName = resolvedName;
@@ -92,6 +129,127 @@ public class SavedItemExample : MonoBehaviour
         ShowTemporarySaveFeedback(feedbackMessage);
 
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
+    }
+
+    private void EnsureNameSelectionMenuText()
+    {
+        if (nameSelectionMenuText != null)
+        {
+            return;
+        }
+
+        GameObject nameSelectionMenuObject = new GameObject("SaveNameSelectionMenuText");
+        nameSelectionMenuText = nameSelectionMenuObject.AddComponent<TextMesh>();
+        nameSelectionMenuText.fontSize = 56;
+        nameSelectionMenuText.characterSize = 0.01f;
+        nameSelectionMenuText.anchor = TextAnchor.MiddleCenter;
+        nameSelectionMenuText.alignment = TextAlignment.Center;
+        nameSelectionMenuText.color = Color.white;
+        nameSelectionMenuText.gameObject.SetActive(false);
+        UpdateNameSelectionMenuTransform();
+    }
+
+    private void UpdateNameSelectionMenuTransform()
+    {
+        if (nameSelectionMenuText == null || Camera.main == null)
+        {
+            return;
+        }
+
+        if (nameSelectionMenuText.transform.parent != Camera.main.transform)
+        {
+            nameSelectionMenuText.transform.SetParent(Camera.main.transform, false);
+        }
+
+        nameSelectionMenuText.transform.localPosition = nameSelectionMenuLocalOffset;
+        nameSelectionMenuText.transform.localRotation = Quaternion.identity;
+    }
+
+    private void ShowNameSelectionMenu()
+    {
+        // MVP preset name selection UI: open simple headset menu before save instead of typing a name.
+        isNameSelectionMenuOpen = true;
+        selectedPresetNameIndex = 0;
+
+        EnsureNameSelectionMenuText();
+        UpdateNameSelectionMenuText();
+        nameSelectionMenuText.gameObject.SetActive(true);
+    }
+
+    private void HideNameSelectionMenu()
+    {
+        isNameSelectionMenuOpen = false;
+
+        if (nameSelectionMenuText != null)
+        {
+            nameSelectionMenuText.gameObject.SetActive(false);
+        }
+    }
+
+    private void HandleNameSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
+    {
+        if (!isNameSelectionMenuOpen || presetItemNames == null || presetItemNames.Length == 0)
+        {
+            return;
+        }
+
+        // MVP preset name selection UI: cycle presets with controller A/B and keyboard fallback.
+        if (rightPrimaryButtonPressedThisFrame || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
+        {
+            selectedPresetNameIndex++;
+            if (selectedPresetNameIndex >= presetItemNames.Length)
+            {
+                selectedPresetNameIndex = 0;
+            }
+
+            UpdateNameSelectionMenuText();
+        }
+
+        if (rightSecondaryButtonPressedThisFrame || Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
+        {
+            selectedPresetNameIndex--;
+            if (selectedPresetNameIndex < 0)
+            {
+                selectedPresetNameIndex = presetItemNames.Length - 1;
+            }
+
+            UpdateNameSelectionMenuText();
+        }
+    }
+
+    private void UpdateNameSelectionMenuText()
+    {
+        if (nameSelectionMenuText == null)
+        {
+            return;
+        }
+
+        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRight Trigger to save";
+    }
+
+    private string GetSelectedNameForSave()
+    {
+        if (presetItemNames != null && presetItemNames.Length > 0)
+        {
+            if (selectedPresetNameIndex < 0 || selectedPresetNameIndex >= presetItemNames.Length)
+            {
+                selectedPresetNameIndex = 0;
+            }
+
+            string selectedPresetName = presetItemNames[selectedPresetNameIndex];
+            if (!string.IsNullOrWhiteSpace(selectedPresetName))
+            {
+                return selectedPresetName;
+            }
+        }
+
+        // Keep Inspector fallback for keyboard/debug usage when presets are unavailable.
+        if (!string.IsNullOrWhiteSpace(testItemName))
+        {
+            return testItemName;
+        }
+
+        return "Unnamed Item";
     }
 
     private Vector3 GetSavePlacementPosition()
