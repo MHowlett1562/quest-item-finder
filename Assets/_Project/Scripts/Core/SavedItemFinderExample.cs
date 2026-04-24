@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.XR;
 
@@ -11,6 +12,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private float nextDistanceLogTime;
 	private TextMesh distanceText;
 	private TextMesh hudArrowText;
+	private TextMesh itemSelectionMenuText;
 	private GameObject directionalIndicator;
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
@@ -19,10 +21,18 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] private bool showTargetMarker = false;
 	private bool wasLeftTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
+	private bool wasRightSecondaryButtonPressed;
 	// Find Mode toggle UX improvement: true while single-item find mode is actively guiding to one item.
 	private bool isSingleItemFindModeActive;
+	// MVP item selection UI: active while user is choosing which item to find.
+	private bool isItemSelectionMenuActive;
+	// MVP item selection UI: unique item names shown in the simple camera-parented menu.
+	private List<string> selectableItemNames = new List<string>();
+	private int selectedItemNameIndex;
+	private Coroutine hideItemSelectionMenuTextCoroutine;
 	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
 	private static readonly Vector3 hudArrowLocalOffset = new Vector3(0f, -0.06f, 1.5f);
+	private static readonly Vector3 itemSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.3f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
 	// Temporary XR runtime material fix for primitives created at runtime.
 	[SerializeField] private Material targetMarkerMaterial;
@@ -58,34 +68,51 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		bool rightPrimaryButtonPressed = false;
+		bool rightSecondaryButtonPressed = false;
 		InputDevice rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
 		if (rightHandDevice.isValid)
 		{
 			rightHandDevice.TryGetFeatureValue(CommonUsages.primaryButton, out rightPrimaryButtonPressed);
+			rightHandDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out rightSecondaryButtonPressed);
 		}
 
 		bool leftTriggerPressedThisFrame = leftTriggerPressed && !wasLeftTriggerPressed;
 		bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
+		bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
 		wasLeftTriggerPressed = leftTriggerPressed;
 		wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
+		wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
 
-		if (Input.GetKeyDown(KeyCode.F) || rightPrimaryButtonPressedThisFrame)
+		bool findInputPressedThisFrame = Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame;
+
+		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && rightPrimaryButtonPressedThisFrame))
 		{
+			HideItemSelectionMenu();
 			currentTargetItem = null;
 			SpawnAllSavedItems();
 		}
-		else if (Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame)
+
+		if (isItemSelectionMenuActive)
+		{
+			UpdateItemSelectionMenuTransform();
+			HandleItemSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+		}
+
+		if (findInputPressedThisFrame)
 		{
 			// Find Mode toggle UX improvement: G/left trigger now toggles single-item find mode on/off.
-			if (!isSingleItemFindModeActive)
+			if (isSingleItemFindModeActive)
 			{
-				SpawnOneSavedItemByName(testItemName);
-				isSingleItemFindModeActive = currentTargetItem != null;
+				DisableSingleItemFindMode();
+			}
+			else if (isItemSelectionMenuActive)
+			{
+				ConfirmItemSelectionAndStartFindMode();
 			}
 			else
 			{
-				DisableSingleItemFindMode();
+				ShowItemSelectionMenu();
 			}
 		}
 
@@ -217,6 +244,207 @@ public class SavedItemFinderExample : MonoBehaviour
 		hudArrowText.anchor = TextAnchor.MiddleCenter;
 		hudArrowText.alignment = TextAlignment.Center;
 		hudArrowText.color = Color.white;
+	}
+
+	private void EnsureItemSelectionMenuText()
+	{
+		if (itemSelectionMenuText != null)
+		{
+			return;
+		}
+
+		GameObject itemSelectionMenuObject = new GameObject("ItemSelectionMenuText");
+		itemSelectionMenuText = itemSelectionMenuObject.AddComponent<TextMesh>();
+		itemSelectionMenuText.fontSize = 48;
+		itemSelectionMenuText.characterSize = 0.01f;
+		itemSelectionMenuText.anchor = TextAnchor.MiddleCenter;
+		itemSelectionMenuText.alignment = TextAlignment.Center;
+		itemSelectionMenuText.color = Color.white;
+		itemSelectionMenuText.gameObject.SetActive(false);
+		UpdateItemSelectionMenuTransform();
+	}
+
+	private void UpdateItemSelectionMenuTransform()
+	{
+		if (itemSelectionMenuText == null || Camera.main == null)
+		{
+			return;
+		}
+
+		if (itemSelectionMenuText.transform.parent != Camera.main.transform)
+		{
+			itemSelectionMenuText.transform.SetParent(Camera.main.transform, false);
+		}
+
+		itemSelectionMenuText.transform.localPosition = itemSelectionMenuLocalOffset;
+		itemSelectionMenuText.transform.localRotation = Quaternion.identity;
+	}
+
+	private void ShowItemSelectionMenu()
+	{
+		// MVP item selection UI: build a unique list of saved item names and show a tiny menu.
+		savedItemManager.LoadData();
+		List<SavedItemData> items = savedItemManager.GetAllItems();
+		if (items == null)
+		{
+			items = new List<SavedItemData>();
+		}
+
+		selectableItemNames.Clear();
+		HashSet<string> seenNames = new HashSet<string>();
+
+		for (int i = 0; i < items.Count; i++)
+		{
+			SavedItemData item = items[i];
+			if (item == null)
+			{
+				continue;
+			}
+
+			string name = string.IsNullOrWhiteSpace(item.itemName) ? "Unnamed Item" : item.itemName;
+			if (seenNames.Add(name))
+			{
+				selectableItemNames.Add(name);
+			}
+		}
+
+		// MVP XR menu navigation: log source item counts and the unique menu options.
+		Debug.Log("MVP menu build: total saved items=" + items.Count + ", unique names=" + selectableItemNames.Count);
+		for (int i = 0; i < selectableItemNames.Count; i++)
+		{
+			Debug.Log("MVP menu option " + i + ": " + selectableItemNames[i]);
+		}
+
+		if (selectableItemNames.Count == 0)
+		{
+			ShowTemporaryItemSelectionMessage("No saved items");
+			isItemSelectionMenuActive = false;
+			return;
+		}
+
+		if (hideItemSelectionMenuTextCoroutine != null)
+		{
+			StopCoroutine(hideItemSelectionMenuTextCoroutine);
+			hideItemSelectionMenuTextCoroutine = null;
+		}
+
+		selectedItemNameIndex = 0;
+		isItemSelectionMenuActive = true;
+
+		EnsureItemSelectionMenuText();
+		UpdateItemSelectionMenuText();
+		itemSelectionMenuText.gameObject.SetActive(true);
+	}
+
+	private void HandleItemSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
+	{
+		if (!isItemSelectionMenuActive || selectableItemNames.Count == 0)
+		{
+			return;
+		}
+
+		// MVP XR menu navigation: support both keyboard fallback and headset-friendly A/B cycling.
+		if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S) || rightPrimaryButtonPressedThisFrame)
+		{
+			selectedItemNameIndex++;
+			if (selectedItemNameIndex >= selectableItemNames.Count)
+			{
+				selectedItemNameIndex = 0;
+			}
+
+			UpdateItemSelectionMenuText();
+		}
+
+		if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W) || rightSecondaryButtonPressedThisFrame)
+		{
+			selectedItemNameIndex--;
+			if (selectedItemNameIndex < 0)
+			{
+				selectedItemNameIndex = selectableItemNames.Count - 1;
+			}
+
+			UpdateItemSelectionMenuText();
+		}
+	}
+
+	private void ConfirmItemSelectionAndStartFindMode()
+	{
+		if (!isItemSelectionMenuActive || selectableItemNames.Count == 0)
+		{
+			HideItemSelectionMenu();
+			return;
+		}
+
+		string selectedItemName = selectableItemNames[selectedItemNameIndex];
+		if (string.IsNullOrWhiteSpace(selectedItemName))
+		{
+			selectedItemName = string.IsNullOrWhiteSpace(testItemName) ? "Unnamed Item" : testItemName;
+		}
+
+		HideItemSelectionMenu();
+		SpawnOneSavedItemByName(selectedItemName);
+
+		// Keep old keyboard/debug fallback available if selected lookup fails unexpectedly.
+		if (currentTargetItem == null && !string.IsNullOrWhiteSpace(testItemName) && selectedItemName != testItemName)
+		{
+			SpawnOneSavedItemByName(testItemName);
+		}
+
+		isSingleItemFindModeActive = currentTargetItem != null;
+	}
+
+	private void UpdateItemSelectionMenuText()
+	{
+		if (itemSelectionMenuText == null)
+		{
+			return;
+		}
+
+		if (selectableItemNames.Count == 0)
+		{
+			itemSelectionMenuText.text = "No saved items";
+			return;
+		}
+
+		string selectedName = selectableItemNames[selectedItemNameIndex];
+		itemSelectionMenuText.text = "Select item\n" + selectedName + "\nA/B to cycle\nLeft Trigger to confirm";
+	}
+
+	private void HideItemSelectionMenu()
+	{
+		isItemSelectionMenuActive = false;
+
+		if (itemSelectionMenuText != null)
+		{
+			itemSelectionMenuText.gameObject.SetActive(false);
+		}
+	}
+
+	private void ShowTemporaryItemSelectionMessage(string message)
+	{
+		EnsureItemSelectionMenuText();
+		UpdateItemSelectionMenuTransform();
+		itemSelectionMenuText.text = message;
+		itemSelectionMenuText.gameObject.SetActive(true);
+
+		if (hideItemSelectionMenuTextCoroutine != null)
+		{
+			StopCoroutine(hideItemSelectionMenuTextCoroutine);
+		}
+
+		hideItemSelectionMenuTextCoroutine = StartCoroutine(HideItemSelectionMenuTextAfterDelay());
+	}
+
+	private IEnumerator HideItemSelectionMenuTextAfterDelay()
+	{
+		yield return new WaitForSeconds(2f);
+
+		if (!isItemSelectionMenuActive && itemSelectionMenuText != null)
+		{
+			itemSelectionMenuText.gameObject.SetActive(false);
+		}
+
+		hideItemSelectionMenuTextCoroutine = null;
 	}
 
 	private void UpdateHudArrowTextTransform()
@@ -398,6 +626,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		isSingleItemFindModeActive = false;
 		currentTargetItem = null;
+		HideItemSelectionMenu();
 
 		if (distanceText != null)
 		{
