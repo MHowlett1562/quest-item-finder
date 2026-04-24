@@ -39,6 +39,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private static readonly Vector3 hudArrowLocalOffset = new Vector3(0f, -0.06f, 1.5f);
 	private static readonly Vector3 itemSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.3f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
+	private const float minWaypointScaleMultiplier = 0.7f;
+	private const float maxWaypointScaleMultiplier = 1.4f;
 	// Temporary XR runtime material fix for primitives created at runtime.
 	[SerializeField] private Material targetMarkerMaterial;
 	[SerializeField] private Material directionalIndicatorMaterial;
@@ -145,6 +147,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (!showTargetMarker && spawnedMarkers.Count > 0)
 		{
 			ClearSpawnedMarkers();
+		}
+
+		if (showTargetMarker && spawnedMarkers.Count > 0 && Camera.main != null)
+		{
+			UpdateWaypointMarkerScale();
 		}
 
 		if (currentTargetItem != null && Camera.main != null)
@@ -809,6 +816,24 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		spawnedMarkers.Add(waypointMarker);
+	}
+
+	private void UpdateWaypointMarkerScale()
+	{
+		// Distance-based waypoint scaling polish: scale marker roots subtly by camera distance.
+		for (int i = 0; i < spawnedMarkers.Count; i++)
+		{
+			GameObject marker = spawnedMarkers[i];
+			if (marker == null)
+			{
+				continue;
+			}
+
+			float distanceToMarker = Vector3.Distance(Camera.main.transform.position, marker.transform.position);
+			float scaleMultiplier = Mathf.Lerp(minWaypointScaleMultiplier, maxWaypointScaleMultiplier, Mathf.InverseLerp(1f, 6f, distanceToMarker));
+			scaleMultiplier = Mathf.Clamp(scaleMultiplier, minWaypointScaleMultiplier, maxWaypointScaleMultiplier);
+			marker.transform.localScale = Vector3.one * scaleMultiplier;
+		}
 	}
 
 	private void ClearSpawnedMarkers()
