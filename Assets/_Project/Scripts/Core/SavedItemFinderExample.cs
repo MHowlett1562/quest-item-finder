@@ -9,7 +9,9 @@ public class SavedItemFinderExample : MonoBehaviour
 	private List<GameObject> spawnedMarkers = new List<GameObject>();
 	private Transform spawnedMarkersParent;
 	private SavedItemData currentTargetItem;
+	private AudioSource proximityAudioSource;
 	private float nextDistanceLogTime;
+	private float nextBeepTime = 0f;
 	private float lastHotColdDistance = -1f;
 	private float hotColdCheckTimer = 0f;
 	private float hotColdCheckInterval = 0.35f;
@@ -19,6 +21,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh itemSelectionMenuText;
 	private GameObject directionalIndicator;
 	[SerializeField] private SavedItemExample savedItemExample;
+	[SerializeField] private AudioClip proximityBeepClip;
 
 	// Symmetric UI state conflict cleanup: expose read-only find UI state for other scripts.
 	public bool IsFindItemSelectionMenuOpen => isItemSelectionMenuActive;
@@ -65,6 +68,17 @@ public class SavedItemFinderExample : MonoBehaviour
 		{
 			savedItemExample = FindFirstObjectByType<SavedItemExample>();
 		}
+
+		if (proximityAudioSource == null)
+		{
+			// Proximity audio feedback system: simple 2D beep source for active find mode.
+			proximityAudioSource = gameObject.AddComponent<AudioSource>();
+		}
+
+		proximityAudioSource.loop = false;
+		proximityAudioSource.playOnAwake = false;
+		proximityAudioSource.spatialBlend = 0f;
+		proximityAudioSource.volume = 0.5f;
 
 		if (savedItemManager != null)
 		{
@@ -201,6 +215,7 @@ public class SavedItemFinderExample : MonoBehaviour
 			// Direction UX improvement: replace rotating 3D indicator with simple text guidance.
 			string directionText = GetDirectionGuidanceText();
 			UpdateHotColdFeedback(distanceToItem);
+			UpdateProximityAudio(distanceToItem);
 
 			// Draw every frame so the guidance line stays visible while in find mode.
 			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
@@ -889,6 +904,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		isSingleItemFindModeActive = false;
 		currentTargetItem = null;
+		nextBeepTime = 0f;
 		lastHotColdDistance = -1f;
 		hotColdCheckTimer = 0f;
 		HideItemSelectionMenu();
@@ -914,6 +930,44 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		ClearSpawnedMarkers();
+	}
+
+	private void UpdateProximityAudio(float distance)
+	{
+		// Proximity audio tuning and stereo hint: play faster, higher beeps as the user gets closer.
+		if (proximityAudioSource == null || proximityBeepClip == null)
+		{
+			return;
+		}
+
+		float t = Mathf.InverseLerp(0.5f, 6f, distance);
+		float interval = Mathf.Lerp(0.08f, 1.2f, t * t);
+		proximityAudioSource.pitch = Mathf.Lerp(1.7f, 0.75f, t);
+
+		// Proximity audio tuning and stereo hint: subtle 2D left/right pan toward target direction.
+		if (Camera.main != null && currentTargetItem != null)
+		{
+			Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
+			if (directionToTarget.sqrMagnitude > 0.0001f)
+			{
+				Vector3 localDirection = Camera.main.transform.InverseTransformDirection(directionToTarget.normalized);
+				proximityAudioSource.panStereo = Mathf.Clamp(localDirection.x, -0.6f, 0.6f);
+			}
+			else
+			{
+				proximityAudioSource.panStereo = 0f;
+			}
+		}
+		else
+		{
+			proximityAudioSource.panStereo = 0f;
+		}
+
+		if (Time.time >= nextBeepTime)
+		{
+			proximityAudioSource.PlayOneShot(proximityBeepClip);
+			nextBeepTime = Time.time + interval;
+		}
 	}
 
 	public void CancelFindModeAndMenu()

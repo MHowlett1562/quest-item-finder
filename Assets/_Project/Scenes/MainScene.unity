@@ -148,6 +148,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8f00224f4cada884293159b968fe3343, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  savedItemExample: {fileID: 0}
+  proximityBeepClip: {fileID: 8300000, guid: ad5aad6a4259136469a1f6a9eedcc25e, type: 3}
   testItemName: Wallet
   showDistanceText: 1
   showDirectionalIndicator: 1
@@ -368,6 +370,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09c0eff3dbaf8934ab44ba2c5d52dd70, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  savedItemFinderExample: {fileID: 0}
   testItemName: Keys
   presetItemNames:
   - Keys
@@ -378,6 +381,7 @@ MonoBehaviour:
   aimMarkerMaterial: {fileID: 2100000, guid: 727f87098255ad04987a60f5f08390bc, type: 2}
   controllerSaveDistance: 1
   fallbackDistanceFromCamera: 2
+  controllerRayWidth: 0.0075
 --- !u!4 &1415189430
 Transform:
   m_ObjectHideFlags: 0
