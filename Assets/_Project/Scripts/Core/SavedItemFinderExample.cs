@@ -10,8 +10,12 @@ public class SavedItemFinderExample : MonoBehaviour
 	private Transform spawnedMarkersParent;
 	private SavedItemData currentTargetItem;
 	private float nextDistanceLogTime;
+	private float lastHotColdDistance = -1f;
+	private float hotColdCheckTimer = 0f;
+	private float hotColdCheckInterval = 0.35f;
 	private TextMesh distanceText;
 	private TextMesh hudArrowText;
+	private TextMesh hotColdText;
 	private TextMesh itemSelectionMenuText;
 	private GameObject directionalIndicator;
 	[SerializeField] private SavedItemExample savedItemExample;
@@ -42,8 +46,12 @@ public class SavedItemFinderExample : MonoBehaviour
 	private Coroutine hideItemSelectionMenuTextCoroutine;
 	private static readonly Vector3 distanceTextLocalOffset = new Vector3(0f, -0.15f, 1.5f);
 	private static readonly Vector3 hudArrowLocalOffset = new Vector3(0f, -0.06f, 1.5f);
+	private Vector3 currentHudArrowLocalPosition = new Vector3(0f, -0.08f, 1.5f);
+	private int lastBehindArrowSide = 1;
+	private static readonly Vector3 hotColdTextLocalOffset = new Vector3(0f, -0.24f, 1.5f);
 	private static readonly Vector3 itemSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.3f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
+	private float hotColdDeadZoneMeters = 0.15f;
 	private const float minWaypointScaleMultiplier = 0.7f;
 	private const float maxWaypointScaleMultiplier = 1.4f;
 	// Temporary XR runtime material fix for primitives created at runtime.
@@ -185,11 +193,14 @@ public class SavedItemFinderExample : MonoBehaviour
 			// HUD arrow direction UX improvement: flat TextMesh arrow for quick passthrough readability.
 			EnsureHudArrowText();
 			hudArrowText.gameObject.SetActive(true);
-			UpdateHudArrowTextTransform();
+			EnsureHotColdText();
+			hotColdText.gameObject.SetActive(true);
+			UpdateHotColdTextTransform();
 
 			float distanceToItem = Vector3.Distance(Camera.main.transform.position, currentTargetItem.lastKnownPosition);
 			// Direction UX improvement: replace rotating 3D indicator with simple text guidance.
 			string directionText = GetDirectionGuidanceText();
+			UpdateHotColdFeedback(distanceToItem);
 
 			// Draw every frame so the guidance line stays visible while in find mode.
 			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
@@ -201,6 +212,7 @@ public class SavedItemFinderExample : MonoBehaviour
 			if (hudArrowText != null)
 			{
 				hudArrowText.text = GetDirectionArrowSymbol(directionText);
+				UpdateHudArrowTextTransform(directionText);
 			}
 
 			if (Time.time >= nextDistanceLogTime)
@@ -224,6 +236,11 @@ public class SavedItemFinderExample : MonoBehaviour
 			if (hudArrowText != null)
 			{
 				hudArrowText.gameObject.SetActive(false);
+			}
+
+			if (hotColdText != null)
+			{
+				hotColdText.gameObject.SetActive(false);
 			}
 		}
 	}
@@ -278,14 +295,114 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (Camera.main != null)
 		{
 			hudArrowText.transform.SetParent(Camera.main.transform, false);
-			hudArrowText.transform.localPosition = hudArrowLocalOffset;
+			hudArrowText.transform.localPosition = currentHudArrowLocalPosition;
 			hudArrowText.transform.localRotation = Quaternion.identity;
 		}
-		hudArrowText.fontSize = 72;
-		hudArrowText.characterSize = 0.012f;
+		// Edge-of-screen waypoint indicator polish: larger minimalist chevron-style HUD arrow.
+		hudArrowText.fontSize = 96;
+		hudArrowText.characterSize = 0.014f;
 		hudArrowText.anchor = TextAnchor.MiddleCenter;
 		hudArrowText.alignment = TextAlignment.Center;
 		hudArrowText.color = Color.white;
+	}
+
+	private void EnsureHotColdText()
+	{
+		if (hotColdText != null)
+		{
+			return;
+		}
+
+		GameObject hotColdTextObject = new GameObject("HotColdText");
+		hotColdText = hotColdTextObject.AddComponent<TextMesh>();
+		if (Camera.main != null)
+		{
+			hotColdText.transform.SetParent(Camera.main.transform, false);
+			hotColdText.transform.localPosition = hotColdTextLocalOffset;
+			hotColdText.transform.localRotation = Quaternion.identity;
+		}
+		hotColdText.fontSize = 48;
+		hotColdText.characterSize = 0.01f;
+		hotColdText.anchor = TextAnchor.MiddleCenter;
+		hotColdText.alignment = TextAlignment.Center;
+		hotColdText.color = Color.white;
+	}
+
+	private void UpdateHotColdTextTransform()
+	{
+		if (hotColdText == null || Camera.main == null)
+		{
+			return;
+		}
+
+		if (hotColdText.transform.parent != Camera.main.transform)
+		{
+			hotColdText.transform.SetParent(Camera.main.transform, false);
+		}
+
+		hotColdText.transform.localPosition = hotColdTextLocalOffset;
+		hotColdText.transform.localRotation = Quaternion.identity;
+	}
+
+	private void UpdateHotColdFeedback(float currentDistance)
+	{
+		// Hot/cold proximity feedback polish: compare at a fixed interval to reduce tracking noise.
+		if (hotColdText == null)
+		{
+			return;
+		}
+
+		hotColdCheckTimer += Time.deltaTime;
+		if (hotColdCheckTimer < hotColdCheckInterval)
+		{
+			return;
+		}
+
+		hotColdCheckTimer = 0f;
+		float previousDistanceBeforeUpdate = lastHotColdDistance;
+		float delta = 0f;
+		Color arrowHotColdColor = Color.white;
+
+		if (lastHotColdDistance < 0f)
+		{
+			lastHotColdDistance = currentDistance;
+			hotColdText.text = "STEADY";
+			hotColdText.color = Color.white;
+			arrowHotColdColor = Color.white;
+			delta = 0f;
+		}
+		else
+		{
+			delta = currentDistance - lastHotColdDistance;
+			if (delta < -hotColdDeadZoneMeters)
+			{
+				hotColdText.text = "WARMER";
+				hotColdText.color = Color.green;
+				arrowHotColdColor = Color.green;
+			}
+			else if (delta > hotColdDeadZoneMeters)
+			{
+				hotColdText.text = "COLDER";
+				hotColdText.color = Color.red;
+				arrowHotColdColor = Color.red;
+			}
+			else
+			{
+				hotColdText.text = "STEADY";
+				hotColdText.color = Color.white;
+				arrowHotColdColor = Color.white;
+			}
+
+			lastHotColdDistance = currentDistance;
+		}
+
+		// Arrow color hot/cold feedback polish: reuse the same hot/cold result to color the direction arrow.
+		if (hudArrowText != null)
+		{
+			hudArrowText.color = arrowHotColdColor;
+		}
+
+		Debug.Log($"HOTCOLD current={currentDistance:F2} last={previousDistanceBeforeUpdate:F2} delta={delta:F2}");
 	}
 
 	private void EnsureItemSelectionMenuText()
@@ -433,6 +550,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		isSingleItemFindModeActive = currentTargetItem != null;
+		if (isSingleItemFindModeActive)
+		{
+			lastHotColdDistance = -1f;
+			hotColdCheckTimer = 0f;
+		}
 	}
 
 	private void UpdateItemSelectionMenuText()
@@ -489,9 +611,9 @@ public class SavedItemFinderExample : MonoBehaviour
 		hideItemSelectionMenuTextCoroutine = null;
 	}
 
-	private void UpdateHudArrowTextTransform()
+	private void UpdateHudArrowTextTransform(string directionText)
 	{
-		if (hudArrowText == null || Camera.main == null)
+		if (hudArrowText == null || Camera.main == null || currentTargetItem == null)
 		{
 			return;
 		}
@@ -501,7 +623,69 @@ public class SavedItemFinderExample : MonoBehaviour
 			hudArrowText.transform.SetParent(Camera.main.transform, false);
 		}
 
-		hudArrowText.transform.localPosition = hudArrowLocalOffset;
+		Vector3 viewportPosition = Camera.main.WorldToViewportPoint(currentTargetItem.lastKnownPosition);
+		bool isTargetVisible = viewportPosition.z > 0f
+			&& viewportPosition.x >= 0f && viewportPosition.x <= 1f
+			&& viewportPosition.y >= 0f && viewportPosition.y <= 1f;
+
+		// Dynamic edge-of-screen waypoint indicator polish: hide HUD arrow when target is already visible.
+		if (isTargetVisible)
+		{
+			hudArrowText.gameObject.SetActive(false);
+			return;
+		}
+
+		if (!hudArrowText.gameObject.activeSelf)
+		{
+			hudArrowText.gameObject.SetActive(true);
+		}
+
+		Vector3 targetHudArrowLocalPosition;
+
+		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
+		if (directionToTarget.sqrMagnitude > 0.0001f)
+		{
+			Vector3 localDirection = Camera.main.transform.InverseTransformDirection(directionToTarget.normalized);
+
+			// Behind-target HUD direction cleanup: keep behind targets pinned to left/right edge instead of drifting center.
+			if (localDirection.z < -0.25f)
+			{
+				int behindArrowSide = lastBehindArrowSide;
+				if (localDirection.x < -0.05f)
+				{
+					behindArrowSide = -1;
+				}
+				else if (localDirection.x > 0.05f)
+				{
+					behindArrowSide = 1;
+				}
+
+				lastBehindArrowSide = behindArrowSide;
+				targetHudArrowLocalPosition = new Vector3(behindArrowSide < 0 ? -0.6f : 0.6f, 0f, hudArrowLocalOffset.z);
+				currentHudArrowLocalPosition = Vector3.Lerp(currentHudArrowLocalPosition, targetHudArrowLocalPosition, 0.2f);
+				hudArrowText.transform.localPosition = currentHudArrowLocalPosition;
+				hudArrowText.transform.localRotation = Quaternion.identity;
+				return;
+			}
+		}
+
+		if (viewportPosition.z <= 0f)
+		{
+			viewportPosition.x = 1f - viewportPosition.x;
+			viewportPosition.y = 1f - viewportPosition.y;
+		}
+
+		viewportPosition.x = Mathf.Clamp(viewportPosition.x, 0.12f, 0.88f);
+		viewportPosition.y = Mathf.Clamp(viewportPosition.y, 0.16f, 0.84f);
+
+		float localX = (viewportPosition.x - 0.5f) * 0.8f;
+		float localY = (viewportPosition.y - 0.5f) * 0.6f;
+		targetHudArrowLocalPosition = new Vector3(localX, localY, hudArrowLocalOffset.z);
+		currentHudArrowLocalPosition = Vector3.Lerp(currentHudArrowLocalPosition, targetHudArrowLocalPosition, 0.2f);
+
+		// Dynamic edge-of-screen waypoint indicator polish: slide arrow around HUD edge based on target viewport position.
+		hudArrowText.transform.localPosition = currentHudArrowLocalPosition;
+
 		hudArrowText.transform.localRotation = Quaternion.identity;
 	}
 
@@ -561,41 +745,30 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
-		directionToTarget.y = 0f;
 
 		if (directionToTarget.sqrMagnitude < 0.0001f)
 		{
 			return "Ahead";
 		}
 
-		directionToTarget.Normalize();
+		Vector3 localDirection = Camera.main.transform.InverseTransformDirection(directionToTarget.normalized);
 
-		Vector3 cameraForward = Camera.main.transform.forward;
-		cameraForward.y = 0f;
-		if (cameraForward.sqrMagnitude < 0.0001f)
-		{
-			return "Ahead";
-		}
-		cameraForward.Normalize();
-
-		Vector3 cameraRight = Camera.main.transform.right;
-		cameraRight.y = 0f;
-		if (cameraRight.sqrMagnitude < 0.0001f)
-		{
-			return "Ahead";
-		}
-		cameraRight.Normalize();
-
-		float forwardDot = Vector3.Dot(cameraForward, directionToTarget);
-		float rightDot = Vector3.Dot(cameraRight, directionToTarget);
-
-		// Direction UX improvement: dead zone keeps guidance stable and easy to read.
-		if (forwardDot > 0.35f || Mathf.Abs(rightDot) < 0.2f)
+		if (localDirection.z > 0.35f && Mathf.Abs(localDirection.x) < 0.2f)
 		{
 			return "Ahead";
 		}
 
-		if (rightDot < 0f)
+		if (localDirection.z < -0.25f)
+		{
+			if (localDirection.x < 0f)
+			{
+				return "Turn Around Left";
+			}
+
+			return "Turn Around Right";
+		}
+
+		if (localDirection.x < 0f)
 		{
 			return "Turn Left";
 		}
@@ -605,17 +778,26 @@ public class SavedItemFinderExample : MonoBehaviour
 
 	private string GetDirectionArrowSymbol(string directionText)
 	{
+		if (currentTargetItem != null && Camera.main != null)
+		{
+			Vector3 viewportPosition = Camera.main.WorldToViewportPoint(currentTargetItem.lastKnownPosition);
+			if (viewportPosition.z > 0f && viewportPosition.y > 0.84f)
+			{
+				return "\u2227";
+			}
+		}
+
 		if (directionText == "Turn Left")
 		{
-			return "\u2190";
+			return "\u2039";
 		}
 
 		if (directionText == "Turn Right")
 		{
-			return "\u2192";
+			return "\u203A";
 		}
 
-		return "\u2191";
+		return "\u2228";
 	}
 
 	private void SpawnOneSavedItemByName(string itemName)
@@ -633,6 +815,8 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		currentTargetItem = item;
+		lastHotColdDistance = -1f;
+		hotColdCheckTimer = 0f;
 
 		Debug.Log("Selected item: Name=" + item.itemName + ", Id=" + item.itemId + ", Position=" + item.lastKnownPosition + ", SavedAtUtc=" + item.savedAtUtc);
 		if (Camera.main != null)
@@ -668,6 +852,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		isSingleItemFindModeActive = false;
 		currentTargetItem = null;
+		lastHotColdDistance = -1f;
+		hotColdCheckTimer = 0f;
 		HideItemSelectionMenu();
 
 		if (distanceText != null)
@@ -683,6 +869,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (hudArrowText != null)
 		{
 			hudArrowText.gameObject.SetActive(false);
+		}
+
+		if (hotColdText != null)
+		{
+			hotColdText.gameObject.SetActive(false);
 		}
 
 		ClearSpawnedMarkers();
@@ -789,12 +980,12 @@ public class SavedItemFinderExample : MonoBehaviour
 		Material redMaterial = CreateUnlitRedMaterial();
 		Material whiteMaterial = CreateUnlitWhiteMaterial();
 
-		// Red sphere head (0.18m).
+		// Red sphere head (0.12m).
 		GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 		sphere.name = "WaypointSphere";
 		sphere.transform.SetParent(waypointMarker.transform, false);
 		sphere.transform.localPosition = Vector3.zero;
-		sphere.transform.localScale = new Vector3(0.18f, 0.18f, 0.18f);
+		sphere.transform.localScale = new Vector3(0.12f, 0.12f, 0.12f);
 		Renderer sphereRenderer = sphere.GetComponent<Renderer>();
 		if (sphereRenderer != null)
 		{
@@ -806,12 +997,12 @@ public class SavedItemFinderExample : MonoBehaviour
 			sphereCollider.enabled = false;
 		}
 
-		// Small white center dot for clarity (0.05m).
+		// Small white center dot for clarity (0.035m).
 		GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 		dot.name = "WaypointDot";
 		dot.transform.SetParent(waypointMarker.transform, false);
 		dot.transform.localPosition = Vector3.zero;
-		dot.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+		dot.transform.localScale = new Vector3(0.035f, 0.035f, 0.035f);
 		Renderer dotRenderer = dot.GetComponent<Renderer>();
 		if (dotRenderer != null)
 		{
@@ -827,8 +1018,8 @@ public class SavedItemFinderExample : MonoBehaviour
 		GameObject drop = GameObject.CreatePrimitive(PrimitiveType.Capsule);
 		drop.name = "WaypointDrop";
 		drop.transform.SetParent(waypointMarker.transform, false);
-		drop.transform.localPosition = new Vector3(0f, -0.16f, 0f);
-		drop.transform.localScale = new Vector3(0.04f, 0.18f, 0.04f);
+		drop.transform.localPosition = new Vector3(0f, -0.11f, 0f);
+		drop.transform.localScale = new Vector3(0.025f, 0.12f, 0.025f);
 		Renderer dropRenderer = drop.GetComponent<Renderer>();
 		if (dropRenderer != null)
 		{
