@@ -641,13 +641,17 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		Vector3 targetHudArrowLocalPosition;
+		const float hudXMin = -0.65f;
+		const float hudXMax = 0.65f;
+		const float hudYMin = -0.28f;
+		const float hudYMax = 0.28f;
 
 		Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
 		if (directionToTarget.sqrMagnitude > 0.0001f)
 		{
 			Vector3 localDirection = Camera.main.transform.InverseTransformDirection(directionToTarget.normalized);
 
-			// Behind-target HUD direction cleanup: keep behind targets pinned to left/right edge instead of drifting center.
+			// Behind-target side-arrow polish: keep behind targets pinned to left/right edge with stronger vertical offset.
 			if (localDirection.z < -0.25f)
 			{
 				int behindArrowSide = lastBehindArrowSide;
@@ -661,7 +665,8 @@ public class SavedItemFinderExample : MonoBehaviour
 				}
 
 				lastBehindArrowSide = behindArrowSide;
-				targetHudArrowLocalPosition = new Vector3(behindArrowSide < 0 ? -0.6f : 0.6f, 0f, hudArrowLocalOffset.z);
+				float behindLocalY = Mathf.Clamp(localDirection.y * 0.35f, -0.28f, 0.28f);
+				targetHudArrowLocalPosition = new Vector3(behindArrowSide < 0 ? -0.65f : 0.65f, behindLocalY, hudArrowLocalOffset.z);
 				currentHudArrowLocalPosition = Vector3.Lerp(currentHudArrowLocalPosition, targetHudArrowLocalPosition, 0.2f);
 				hudArrowText.transform.localPosition = currentHudArrowLocalPosition;
 				hudArrowText.transform.localRotation = Quaternion.identity;
@@ -678,12 +683,21 @@ public class SavedItemFinderExample : MonoBehaviour
 		viewportPosition.x = Mathf.Clamp(viewportPosition.x, 0.12f, 0.88f);
 		viewportPosition.y = Mathf.Clamp(viewportPosition.y, 0.16f, 0.84f);
 
-		float localX = (viewportPosition.x - 0.5f) * 0.8f;
-		float localY = (viewportPosition.y - 0.5f) * 0.6f;
+		float edgeBiasedViewportX = viewportPosition.x < 0.5f ? 0.12f : 0.88f;
+		if (Mathf.Abs(viewportPosition.x - 0.5f) < 0.12f)
+		{
+			edgeBiasedViewportX = viewportPosition.x;
+		}
+
+		float edgeBiasedViewportY = Mathf.Clamp(viewportPosition.y, 0.16f, 0.84f);
+		float localX = Mathf.Lerp(hudXMin, hudXMax, edgeBiasedViewportX);
+		float localY = Mathf.Lerp(hudYMin, hudYMax, edgeBiasedViewportY);
+		localX = Mathf.Clamp(localX, hudXMin, hudXMax);
+		localY = Mathf.Clamp(localY, hudYMin, hudYMax);
 		targetHudArrowLocalPosition = new Vector3(localX, localY, hudArrowLocalOffset.z);
 		currentHudArrowLocalPosition = Vector3.Lerp(currentHudArrowLocalPosition, targetHudArrowLocalPosition, 0.2f);
 
-		// Dynamic edge-of-screen waypoint indicator polish: slide arrow around HUD edge based on target viewport position.
+		// 2D peripheral HUD arrow movement polish: slide arrow around a safe HUD perimeter instead of a flat line.
 		hudArrowText.transform.localPosition = currentHudArrowLocalPosition;
 
 		hudArrowText.transform.localRotation = Quaternion.identity;
@@ -778,6 +792,29 @@ public class SavedItemFinderExample : MonoBehaviour
 
 	private string GetDirectionArrowSymbol(string directionText)
 	{
+		if (currentTargetItem != null && Camera.main != null)
+		{
+			Vector3 directionToTarget = currentTargetItem.lastKnownPosition - Camera.main.transform.position;
+			if (directionToTarget.sqrMagnitude > 0.0001f)
+			{
+				Vector3 localDirection = Camera.main.transform.InverseTransformDirection(directionToTarget.normalized);
+				if (localDirection.z < -0.25f)
+				{
+					int behindArrowSide = lastBehindArrowSide;
+					if (localDirection.x < -0.05f)
+					{
+						behindArrowSide = -1;
+					}
+					else if (localDirection.x > 0.05f)
+					{
+						behindArrowSide = 1;
+					}
+
+					return behindArrowSide < 0 ? "\u2039" : "\u203A";
+				}
+			}
+		}
+
 		if (currentTargetItem != null && Camera.main != null)
 		{
 			Vector3 viewportPosition = Camera.main.WorldToViewportPoint(currentTargetItem.lastKnownPosition);
