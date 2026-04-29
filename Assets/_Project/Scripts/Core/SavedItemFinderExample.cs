@@ -30,6 +30,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
 	[SerializeField] private bool showDistanceText = true;
+	// Distance display settings polish: toggle between metric (m) and imperial (ft) units
+	[SerializeField] private bool useImperialUnits = false;
 	[SerializeField] private bool showDirectionalIndicator = false;
 	[SerializeField] private bool showTargetMarker = false;
 	private bool wasLeftTriggerPressed;
@@ -222,7 +224,10 @@ public class SavedItemFinderExample : MonoBehaviour
 			if (showDistanceText && distanceText != null)
 			{
 				// Distance label clarity polish: include item name for better context
-				distanceText.text = "Distance from " + currentTargetItem.itemName + ": " + distanceToItem.ToString("F1") + "m\n" + directionText;
+				// Distance display settings polish: support metric and imperial unit display
+				string distanceUnit = useImperialUnits ? "ft" : "m";
+				float displayDistance = useImperialUnits ? distanceToItem * 3.28084f : distanceToItem;
+				distanceText.text = "Distance from " + currentTargetItem.itemName + ": " + displayDistance.ToString("F1") + distanceUnit + "\n" + directionText;
 			}
 
 			if (hudArrowText != null)

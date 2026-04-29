@@ -152,6 +152,7 @@ MonoBehaviour:
   proximityBeepClip: {fileID: 8300000, guid: ad5aad6a4259136469a1f6a9eedcc25e, type: 3}
   testItemName: Wallet
   showDistanceText: 1
+  useImperialUnits: 1
   showDirectionalIndicator: 1
   showTargetMarker: 1
   targetMarkerMaterial: {fileID: 2100000, guid: b24112d9d81730444a9f89c3256f3923, type: 2}
