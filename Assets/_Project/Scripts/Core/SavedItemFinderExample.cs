@@ -221,7 +221,8 @@ public class SavedItemFinderExample : MonoBehaviour
 			Debug.DrawLine(Camera.main.transform.position, currentTargetItem.lastKnownPosition, Color.red);
 			if (showDistanceText && distanceText != null)
 			{
-				distanceText.text = "Distance: " + distanceToItem.ToString("F1") + "m\n" + directionText;
+				// Distance label clarity polish: include item name for better context
+				distanceText.text = "Distance from " + currentTargetItem.itemName + ": " + distanceToItem.ToString("F1") + "m\n" + directionText;
 			}
 
 			if (hudArrowText != null)
@@ -314,8 +315,9 @@ public class SavedItemFinderExample : MonoBehaviour
 			hudArrowText.transform.localRotation = Quaternion.identity;
 		}
 		// Edge-of-screen waypoint indicator polish: larger minimalist chevron-style HUD arrow.
-		hudArrowText.fontSize = 96;
-		hudArrowText.characterSize = 0.014f;
+		// Arrow visibility polish: increase size and stroke for better VR readability
+		hudArrowText.fontSize = 128;
+		hudArrowText.characterSize = 0.018f;
 		hudArrowText.anchor = TextAnchor.MiddleCenter;
 		hudArrowText.alignment = TextAlignment.Center;
 		hudArrowText.color = Color.white;
@@ -381,7 +383,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (lastHotColdDistance < 0f)
 		{
 			lastHotColdDistance = currentDistance;
-			hotColdText.text = "STEADY";
+			hotColdText.text = "";
 			hotColdText.color = Color.white;
 			arrowHotColdColor = Color.white;
 			delta = 0f;
@@ -403,7 +405,8 @@ public class SavedItemFinderExample : MonoBehaviour
 			}
 			else
 			{
-				hotColdText.text = "STEADY";
+				// Hot/cold UI clarity polish: hide STEADY state to reduce visual clutter
+				hotColdText.text = "";
 				hotColdText.color = Color.white;
 				arrowHotColdColor = Color.white;
 			}
