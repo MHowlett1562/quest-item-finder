@@ -19,6 +19,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh hudArrowText;
 	private TextMesh hotColdText;
 	private TextMesh itemSelectionMenuText;
+	private TextMesh settingsMenuText;
 	private GameObject directionalIndicator;
 	[SerializeField] private SavedItemExample savedItemExample;
 	[SerializeField] private AudioClip proximityBeepClip;
@@ -34,7 +35,11 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] private bool useImperialUnits = false;
 	[SerializeField] private bool showDirectionalIndicator = false;
 	[SerializeField] private bool showTargetMarker = false;
+	// Proximity audio settings: enable/disable audio feedback and control volume
+	[SerializeField] private bool enableProximityAudio = true;
+	[SerializeField] [Range(0f, 1f)] private float proximityAudioVolume = 0.5f;
 	private bool wasLeftTriggerPressed;
+	private bool wasLeftSecondaryButtonPressed;
 	private bool wasRightPrimaryButtonPressed;
 	private bool wasRightSecondaryButtonPressed;
 	// Temporary MVP controller debug cleanup: track deliberate A+B hold before clearing saved data.
@@ -45,6 +50,9 @@ public class SavedItemFinderExample : MonoBehaviour
 	private bool isSingleItemFindModeActive;
 	// MVP item selection UI: active while user is choosing which item to find.
 	private bool isItemSelectionMenuActive;
+	// In-headset settings menu MVP: active while user adjusts quick test settings.
+	private bool isSettingsMenuOpen;
+	private int selectedSettingsIndex;
 	// MVP item selection UI: unique item names shown in the simple camera-parented menu.
 	private List<string> selectableItemNames = new List<string>();
 	private int selectedItemNameIndex;
@@ -55,6 +63,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private int lastBehindArrowSide = 1;
 	private static readonly Vector3 hotColdTextLocalOffset = new Vector3(0f, -0.24f, 1.5f);
 	private static readonly Vector3 itemSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.3f);
+	private static readonly Vector3 settingsMenuLocalOffset = new Vector3(0f, 0.08f, 1.3f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
 	private float hotColdDeadZoneMeters = 0.15f;
 	private const float minWaypointScaleMultiplier = 0.7f;
@@ -80,7 +89,8 @@ public class SavedItemFinderExample : MonoBehaviour
 		proximityAudioSource.loop = false;
 		proximityAudioSource.playOnAwake = false;
 		proximityAudioSource.spatialBlend = 0f;
-		proximityAudioSource.volume = 0.5f;
+		// Proximity audio settings: apply user-configured volume setting
+		proximityAudioSource.volume = proximityAudioVolume;
 
 		if (savedItemManager != null)
 		{
@@ -101,10 +111,12 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		bool leftTriggerPressed = false;
+		bool leftSecondaryButtonPressed = false;
 		InputDevice leftHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
 		if (leftHandDevice.isValid)
 		{
 			leftHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out leftTriggerPressed);
+			leftHandDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out leftSecondaryButtonPressed);
 		}
 
 		bool rightPrimaryButtonPressed = false;
@@ -117,14 +129,17 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		bool leftTriggerPressedThisFrame = leftTriggerPressed && !wasLeftTriggerPressed;
+		bool leftSecondaryButtonPressedThisFrame = leftSecondaryButtonPressed && !wasLeftSecondaryButtonPressed;
 		bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
 		bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
 		wasLeftTriggerPressed = leftTriggerPressed;
+		wasLeftSecondaryButtonPressed = leftSecondaryButtonPressed;
 		wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
 		wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
 
 		bool findInputPressedThisFrame = Input.GetKeyDown(KeyCode.G) || leftTriggerPressedThisFrame;
+		bool settingsTogglePressedThisFrame = Input.GetKeyDown(KeyCode.M) || leftSecondaryButtonPressedThisFrame;
 
 		if (Input.GetKeyDown(KeyCode.C))
 		{
@@ -134,9 +149,24 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
 
+		if (settingsTogglePressedThisFrame)
+		{
+			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
+			{
+				savedItemExample.CancelNameSelectionMenu();
+			}
+
+			if (isItemSelectionMenuActive)
+			{
+				HideItemSelectionMenu();
+			}
+
+			ToggleSettingsMenu();
+		}
+
 		// MVP input conflict cleanup: reserve A/B for active menus by gating show-all while save-name menu is open.
 		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
-		if (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame))
+		if (!isSettingsMenuOpen && (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame)))
 		{
 			if (isSaveNameMenuOpen)
 			{
@@ -148,13 +178,23 @@ public class SavedItemFinderExample : MonoBehaviour
 			SpawnAllSavedItems();
 		}
 
+		if (isSettingsMenuOpen)
+		{
+			UpdateSettingsMenuTransform();
+			HandleSettingsMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+			if (leftTriggerPressedThisFrame)
+			{
+				ApplySelectedSetting();
+			}
+		}
+
 		if (isItemSelectionMenuActive)
 		{
 			UpdateItemSelectionMenuTransform();
 			HandleItemSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
 		}
 
-		if (findInputPressedThisFrame)
+		if (!isSettingsMenuOpen && findInputPressedThisFrame)
 		{
 			if (isSaveNameMenuOpen)
 			{
@@ -444,6 +484,179 @@ public class SavedItemFinderExample : MonoBehaviour
 		itemSelectionMenuText.color = Color.white;
 		itemSelectionMenuText.gameObject.SetActive(false);
 		UpdateItemSelectionMenuTransform();
+	}
+
+	private void EnsureSettingsMenuText()
+	{
+		if (settingsMenuText != null)
+		{
+			return;
+		}
+
+		GameObject settingsMenuObject = new GameObject("SettingsMenuText");
+		settingsMenuText = settingsMenuObject.AddComponent<TextMesh>();
+		settingsMenuText.fontSize = 48;
+		settingsMenuText.characterSize = 0.01f;
+		settingsMenuText.anchor = TextAnchor.MiddleCenter;
+		settingsMenuText.alignment = TextAlignment.Center;
+		settingsMenuText.color = Color.white;
+		settingsMenuText.gameObject.SetActive(false);
+		UpdateSettingsMenuTransform();
+	}
+
+	private void UpdateSettingsMenuTransform()
+	{
+		if (settingsMenuText == null || Camera.main == null)
+		{
+			return;
+		}
+
+		if (settingsMenuText.transform.parent != Camera.main.transform)
+		{
+			settingsMenuText.transform.SetParent(Camera.main.transform, false);
+		}
+
+		settingsMenuText.transform.localPosition = settingsMenuLocalOffset;
+		settingsMenuText.transform.localRotation = Quaternion.identity;
+	}
+
+	private void ToggleSettingsMenu()
+	{
+		if (isSettingsMenuOpen)
+		{
+			HideSettingsMenu();
+			return;
+		}
+
+		isSettingsMenuOpen = true;
+		selectedSettingsIndex = 0;
+
+		// In-headset settings menu MVP: prevent overlapping find menu UI.
+		HideItemSelectionMenu();
+
+		EnsureSettingsMenuText();
+		UpdateSettingsMenuText();
+		settingsMenuText.gameObject.SetActive(true);
+	}
+
+	private void HideSettingsMenu()
+	{
+		isSettingsMenuOpen = false;
+
+		if (settingsMenuText != null)
+		{
+			settingsMenuText.gameObject.SetActive(false);
+		}
+	}
+
+	private void HandleSettingsMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
+	{
+		if (!isSettingsMenuOpen)
+		{
+			return;
+		}
+
+		const int settingsRowCount = 4;
+
+		if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S) || rightPrimaryButtonPressedThisFrame)
+		{
+			selectedSettingsIndex++;
+			if (selectedSettingsIndex >= settingsRowCount)
+			{
+				selectedSettingsIndex = 0;
+			}
+
+			UpdateSettingsMenuText();
+		}
+
+		if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W) || rightSecondaryButtonPressedThisFrame)
+		{
+			selectedSettingsIndex--;
+			if (selectedSettingsIndex < 0)
+			{
+				selectedSettingsIndex = settingsRowCount - 1;
+			}
+
+			UpdateSettingsMenuText();
+		}
+	}
+
+	private void ApplySelectedSetting()
+	{
+		if (!isSettingsMenuOpen)
+		{
+			return;
+		}
+
+		// In-headset settings menu MVP: apply selected quick setting immediately.
+		switch (selectedSettingsIndex)
+		{
+			case 0:
+				showDistanceText = !showDistanceText;
+				if (!showDistanceText && distanceText != null)
+				{
+					distanceText.gameObject.SetActive(false);
+				}
+				break;
+
+			case 1:
+				useImperialUnits = !useImperialUnits;
+				break;
+
+			case 2:
+				enableProximityAudio = !enableProximityAudio;
+				break;
+
+			case 3:
+				if (Mathf.Approximately(proximityAudioVolume, 0f))
+				{
+					proximityAudioVolume = 0.25f;
+				}
+				else if (Mathf.Approximately(proximityAudioVolume, 0.25f))
+				{
+					proximityAudioVolume = 0.5f;
+				}
+				else if (Mathf.Approximately(proximityAudioVolume, 0.5f))
+				{
+					proximityAudioVolume = 0.75f;
+				}
+				else if (Mathf.Approximately(proximityAudioVolume, 0.75f))
+				{
+					proximityAudioVolume = 1f;
+				}
+				else
+				{
+					proximityAudioVolume = 0f;
+				}
+				break;
+		}
+
+		if (proximityAudioSource != null)
+		{
+			proximityAudioSource.volume = proximityAudioVolume;
+		}
+
+		UpdateSettingsMenuText();
+	}
+
+	private void UpdateSettingsMenuText()
+	{
+		if (settingsMenuText == null)
+		{
+			return;
+		}
+
+		int volumePercent = Mathf.RoundToInt(proximityAudioVolume * 100f);
+		string distanceValue = showDistanceText ? "On" : "Off";
+		string unitsValue = useImperialUnits ? "Imperial" : "Metric";
+		string audioValue = enableProximityAudio ? "On" : "Off";
+
+		settingsMenuText.text = "Settings\n"
+			+ (selectedSettingsIndex == 0 ? "> " : "  ") + "Distance Text: " + distanceValue + "\n"
+			+ (selectedSettingsIndex == 1 ? "> " : "  ") + "Units: " + unitsValue + "\n"
+			+ (selectedSettingsIndex == 2 ? "> " : "  ") + "Audio: " + audioValue + "\n"
+			+ (selectedSettingsIndex == 3 ? "> " : "  ") + "Audio Volume: " + volumePercent + "%\n"
+			+ "A/B cycle, Trigger apply\nM / Left Secondary: Close";
 	}
 
 	private void UpdateItemSelectionMenuTransform()
@@ -937,16 +1150,27 @@ public class SavedItemFinderExample : MonoBehaviour
 			hotColdText.gameObject.SetActive(false);
 		}
 
+		HideSettingsMenu();
+
 		ClearSpawnedMarkers();
 	}
 
 	private void UpdateProximityAudio(float distance)
 	{
+		// Proximity audio settings: check if audio is enabled
+		if (!enableProximityAudio)
+		{
+			return;
+		}
+
 		// Proximity audio tuning and stereo hint: play faster, higher beeps as the user gets closer.
 		if (proximityAudioSource == null || proximityBeepClip == null)
 		{
 			return;
 		}
+
+		// Proximity audio settings: apply current volume setting before playing
+		proximityAudioSource.volume = proximityAudioVolume;
 
 		float t = Mathf.InverseLerp(0.5f, 6f, distance);
 		float interval = Mathf.Lerp(0.08f, 1.2f, t * t);
@@ -973,6 +1197,7 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		if (Time.time >= nextBeepTime)
 		{
+			// Proximity audio settings: respects user volume setting for each beep
 			proximityAudioSource.PlayOneShot(proximityBeepClip);
 			nextBeepTime = Time.time + interval;
 		}
