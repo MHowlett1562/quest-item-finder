@@ -150,6 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   savedItemExample: {fileID: 0}
   proximityBeepClip: {fileID: 8300000, guid: ad5aad6a4259136469a1f6a9eedcc25e, type: 3}
+  rightControllerTransform: {fileID: 1217560441}
   testItemName: Wallet
   showDistanceText: 1
   useImperialUnits: 0

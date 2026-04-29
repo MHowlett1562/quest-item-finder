@@ -23,6 +23,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private GameObject directionalIndicator;
 	[SerializeField] private SavedItemExample savedItemExample;
 	[SerializeField] private AudioClip proximityBeepClip;
+	// Clickable settings panel MVP: optional right-controller ray origin for in-headset button clicks.
+	[SerializeField] private Transform rightControllerTransform;
 
 	// Symmetric UI state conflict cleanup: expose read-only find UI state for other scripts.
 	public bool IsFindItemSelectionMenuOpen => isItemSelectionMenuActive;
@@ -40,6 +42,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	[SerializeField] [Range(0f, 1f)] private float proximityAudioVolume = 0.5f;
 	private bool wasLeftTriggerPressed;
 	private bool wasLeftSecondaryButtonPressed;
+	private bool wasRightTriggerPressed;
 	private bool wasRightPrimaryButtonPressed;
 	private bool wasRightSecondaryButtonPressed;
 	// Temporary MVP controller debug cleanup: track deliberate A+B hold before clearing saved data.
@@ -53,6 +56,13 @@ public class SavedItemFinderExample : MonoBehaviour
 	// In-headset settings menu MVP: active while user adjusts quick test settings.
 	private bool isSettingsMenuOpen;
 	private int selectedSettingsIndex;
+	private Transform settingsButtonsParent;
+	private GameObject highlightedSettingsButton;
+	private readonly Dictionary<GameObject, ClickableSettingAction> settingsButtonActions = new Dictionary<GameObject, ClickableSettingAction>();
+	private readonly Dictionary<GameObject, Renderer> settingsButtonRendererLookup = new Dictionary<GameObject, Renderer>();
+	private readonly List<Renderer> settingsButtonRenderers = new List<Renderer>();
+	private Material settingsButtonNormalMaterial;
+	private Material settingsButtonHighlightMaterial;
 	// MVP item selection UI: unique item names shown in the simple camera-parented menu.
 	private List<string> selectableItemNames = new List<string>();
 	private int selectedItemNameIndex;
@@ -63,14 +73,38 @@ public class SavedItemFinderExample : MonoBehaviour
 	private int lastBehindArrowSide = 1;
 	private static readonly Vector3 hotColdTextLocalOffset = new Vector3(0f, -0.24f, 1.5f);
 	private static readonly Vector3 itemSelectionMenuLocalOffset = new Vector3(0f, 0.06f, 1.3f);
-	private static readonly Vector3 settingsMenuLocalOffset = new Vector3(0f, 0.08f, 1.3f);
+	private static readonly Vector3 settingsMenuLocalOffset = new Vector3(0f, 0.2f, 1.3f);
+	private static readonly Vector3 settingsButtonsPanelLocalOffset = new Vector3(0f, -0.16f, 1.22f);
 	private static readonly Vector3 directionalIndicatorLocalOffset = new Vector3(0f, -0.08f, 1.2f);
+	private static readonly Color settingsButtonNormalColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+	private static readonly Color settingsButtonHighlightColor = new Color(0.32f, 0.48f, 0.9f, 1f);
+	private const float settingsRaycastMaxDistance = 3f;
 	private float hotColdDeadZoneMeters = 0.15f;
 	private const float minWaypointScaleMultiplier = 0.7f;
 	private const float maxWaypointScaleMultiplier = 1.4f;
 	// Temporary XR runtime material fix for primitives created at runtime.
 	[SerializeField] private Material targetMarkerMaterial;
 	[SerializeField] private Material directionalIndicatorMaterial;
+
+	private enum ClickableSettingAction
+	{
+		DistanceOn,
+		DistanceOff,
+		UnitsMetric,
+		UnitsImperial,
+		AudioOn,
+		AudioOff,
+		Volume0,
+		Volume25,
+		Volume50,
+		Volume75,
+		Volume100
+	}
+
+	private sealed class ClickableSettingsButtonTag : MonoBehaviour
+	{
+		public ClickableSettingAction action;
+	}
 
 	private void Start()
 	{
@@ -121,20 +155,30 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		bool rightPrimaryButtonPressed = false;
 		bool rightSecondaryButtonPressed = false;
+		bool rightTriggerPressed = false;
+		float rightTriggerValue = 0f;
 		InputDevice rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
 		if (rightHandDevice.isValid)
 		{
+			rightHandDevice.TryGetFeatureValue(CommonUsages.triggerButton, out rightTriggerPressed);
+			rightHandDevice.TryGetFeatureValue(CommonUsages.trigger, out rightTriggerValue);
+			if (rightTriggerValue > 0.75f)
+			{
+				rightTriggerPressed = true;
+			}
 			rightHandDevice.TryGetFeatureValue(CommonUsages.primaryButton, out rightPrimaryButtonPressed);
 			rightHandDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out rightSecondaryButtonPressed);
 		}
 
 		bool leftTriggerPressedThisFrame = leftTriggerPressed && !wasLeftTriggerPressed;
 		bool leftSecondaryButtonPressedThisFrame = leftSecondaryButtonPressed && !wasLeftSecondaryButtonPressed;
+		bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
 		bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
 		bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
 
 		wasLeftTriggerPressed = leftTriggerPressed;
 		wasLeftSecondaryButtonPressed = leftSecondaryButtonPressed;
+		wasRightTriggerPressed = rightTriggerPressed;
 		wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
 		wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
 
@@ -146,8 +190,6 @@ public class SavedItemFinderExample : MonoBehaviour
 			HandleDebugClearAllSavedItems();
 			return;
 		}
-
-		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
 
 		if (settingsTogglePressedThisFrame)
 		{
@@ -164,6 +206,27 @@ public class SavedItemFinderExample : MonoBehaviour
 			ToggleSettingsMenu();
 		}
 
+		if (isSettingsMenuOpen)
+		{
+			// Settings modal input and button readability fix: treat settings as modal UI and block save/find handling.
+			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
+			{
+				savedItemExample.CancelNameSelectionMenu();
+			}
+
+			UpdateSettingsMenuTransform();
+			UpdateClickableSettingsPanel(rightTriggerPressedThisFrame);
+			HandleSettingsMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+			if (leftTriggerPressedThisFrame)
+			{
+				ApplySelectedSetting();
+			}
+
+			return;
+		}
+
+		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
+
 		// MVP input conflict cleanup: reserve A/B for active menus by gating show-all while save-name menu is open.
 		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
 		if (!isSettingsMenuOpen && (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame)))
@@ -176,16 +239,6 @@ public class SavedItemFinderExample : MonoBehaviour
 			HideItemSelectionMenu();
 			currentTargetItem = null;
 			SpawnAllSavedItems();
-		}
-
-		if (isSettingsMenuOpen)
-		{
-			UpdateSettingsMenuTransform();
-			HandleSettingsMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
-			if (leftTriggerPressedThisFrame)
-			{
-				ApplySelectedSetting();
-			}
 		}
 
 		if (isItemSelectionMenuActive)
@@ -535,8 +588,10 @@ public class SavedItemFinderExample : MonoBehaviour
 		HideItemSelectionMenu();
 
 		EnsureSettingsMenuText();
+		EnsureClickableSettingsButtons();
 		UpdateSettingsMenuText();
 		settingsMenuText.gameObject.SetActive(true);
+		SetSettingsButtonsVisible(true);
 	}
 
 	private void HideSettingsMenu()
@@ -547,6 +602,312 @@ public class SavedItemFinderExample : MonoBehaviour
 		{
 			settingsMenuText.gameObject.SetActive(false);
 		}
+
+		SetSettingsButtonsVisible(false);
+		HighlightSettingsButton(null);
+	}
+
+	private void EnsureClickableSettingsButtons()
+	{
+		if (settingsButtonsParent == null)
+		{
+			GameObject settingsButtonsPanelObject = new GameObject("SettingsButtonsPanel");
+			settingsButtonsParent = settingsButtonsPanelObject.transform;
+		}
+
+		UpdateSettingsButtonsTransform();
+		EnsureClickableSettingsButtonMaterials();
+
+		if (settingsButtonActions.Count > 0)
+		{
+			return;
+		}
+
+		// Clickable settings panel MVP: lightweight runtime buttons for right-ray point-and-click.
+		// Clickable settings panel layout and action fix: 2-column grid with clear lower volume rows.
+		CreateClickableSettingsButton("Dist On", new Vector3(-0.2f, 0.06f, 0f), ClickableSettingAction.DistanceOn);
+		CreateClickableSettingsButton("Dist Off", new Vector3(0.2f, 0.06f, 0f), ClickableSettingAction.DistanceOff);
+		CreateClickableSettingsButton("Metric", new Vector3(-0.2f, -0.04f, 0f), ClickableSettingAction.UnitsMetric);
+		CreateClickableSettingsButton("Imperial", new Vector3(0.2f, -0.04f, 0f), ClickableSettingAction.UnitsImperial);
+		CreateClickableSettingsButton("Audio On", new Vector3(-0.2f, -0.14f, 0f), ClickableSettingAction.AudioOn);
+		CreateClickableSettingsButton("Audio Off", new Vector3(0.2f, -0.14f, 0f), ClickableSettingAction.AudioOff);
+		CreateClickableSettingsButton("Vol 0", new Vector3(-0.24f, -0.26f, 0f), ClickableSettingAction.Volume0);
+		CreateClickableSettingsButton("Vol 25", new Vector3(0f, -0.26f, 0f), ClickableSettingAction.Volume25);
+		CreateClickableSettingsButton("Vol 50", new Vector3(0.24f, -0.26f, 0f), ClickableSettingAction.Volume50);
+		CreateClickableSettingsButton("Vol 75", new Vector3(-0.12f, -0.36f, 0f), ClickableSettingAction.Volume75);
+		CreateClickableSettingsButton("Vol 100", new Vector3(0.12f, -0.36f, 0f), ClickableSettingAction.Volume100);
+	}
+
+	private void UpdateSettingsButtonsTransform()
+	{
+		if (settingsButtonsParent == null || Camera.main == null)
+		{
+			return;
+		}
+
+		if (settingsButtonsParent.parent != Camera.main.transform)
+		{
+			settingsButtonsParent.SetParent(Camera.main.transform, false);
+		}
+
+		settingsButtonsParent.localPosition = settingsButtonsPanelLocalOffset;
+		settingsButtonsParent.localRotation = Quaternion.identity;
+	}
+
+	private void SetSettingsButtonsVisible(bool isVisible)
+	{
+		if (settingsButtonsParent != null)
+		{
+			settingsButtonsParent.gameObject.SetActive(isVisible);
+		}
+	}
+
+	private void CreateClickableSettingsButton(string labelText, Vector3 localPosition, ClickableSettingAction action)
+	{
+		// Clickable settings button render fix: create a primitive with built-in mesh and collider.
+		GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+		buttonObject.name = "SettingsButton_" + labelText.Replace(":", string.Empty).Replace(" ", string.Empty).Replace("%", string.Empty);
+		buttonObject.transform.SetParent(settingsButtonsParent, false);
+		buttonObject.transform.localPosition = localPosition;
+		buttonObject.transform.localRotation = Quaternion.identity;
+		Vector3 buttonLocalScale = new Vector3(0.28f, 0.08f, 0.01f);
+		buttonObject.transform.localScale = buttonLocalScale;
+
+		// Clickable settings button render fix: enforce required runtime render/collision components.
+		if (buttonObject.GetComponent<MeshFilter>() == null)
+		{
+			buttonObject.AddComponent<MeshFilter>();
+		}
+
+		Renderer buttonRenderer = buttonObject.GetComponent<Renderer>();
+		if (buttonRenderer == null)
+		{
+			buttonRenderer = buttonObject.AddComponent<MeshRenderer>();
+		}
+
+		if (buttonObject.GetComponent<BoxCollider>() == null)
+		{
+			buttonObject.AddComponent<BoxCollider>();
+		}
+
+		// Clickable settings panel layout and action fix: explicit action tag for robust click mapping.
+		ClickableSettingsButtonTag buttonTag = buttonObject.AddComponent<ClickableSettingsButtonTag>();
+		buttonTag.action = action;
+
+		if (settingsButtonNormalMaterial != null)
+		{
+			buttonRenderer.sharedMaterial = settingsButtonNormalMaterial;
+		}
+		else
+		{
+			buttonRenderer.material.color = settingsButtonNormalColor;
+		}
+		settingsButtonRenderers.Add(buttonRenderer);
+		settingsButtonRendererLookup[buttonObject] = buttonRenderer;
+		settingsButtonActions.Add(buttonObject, action);
+
+		GameObject labelObject = new GameObject("Label");
+		// Clickable settings label scale fix: keep label outside flattened cube scaling.
+		labelObject.transform.SetParent(settingsButtonsParent, false);
+		labelObject.transform.localPosition = localPosition + new Vector3(0f, 0f, -0.011f);
+		labelObject.transform.localScale = Vector3.one;
+		labelObject.transform.localRotation = Quaternion.identity;
+		TextMesh labelMesh = labelObject.AddComponent<TextMesh>();
+		labelMesh.text = labelText;
+		// Clickable settings label final size tuning
+		labelMesh.fontSize = 64;
+		labelMesh.characterSize = 0.0075f;
+		labelMesh.anchor = TextAnchor.MiddleCenter;
+		labelMesh.alignment = TextAlignment.Center;
+		labelMesh.color = Color.white;
+	}
+
+	private void UpdateClickableSettingsPanel(bool rightTriggerPressedThisFrame)
+	{
+		if (!isSettingsMenuOpen)
+		{
+			return;
+		}
+
+		EnsureClickableSettingsButtons();
+		UpdateSettingsButtonsTransform();
+
+		Transform rayOrigin = rightControllerTransform;
+		if (rayOrigin == null && Camera.main != null)
+		{
+			rayOrigin = Camera.main.transform;
+		}
+
+		if (rayOrigin == null)
+		{
+			HighlightSettingsButton(null);
+			return;
+		}
+
+		Ray ray = new Ray(rayOrigin.position, rayOrigin.forward);
+		GameObject hoveredButton = null;
+		ClickableSettingAction hoveredAction = ClickableSettingAction.DistanceOn;
+		bool hasHoveredAction = false;
+		RaycastHit hit;
+		if (Physics.Raycast(ray, out hit, settingsRaycastMaxDistance))
+		{
+			ClickableSettingsButtonTag buttonTag = hit.collider.GetComponent<ClickableSettingsButtonTag>();
+			if (buttonTag == null)
+			{
+				buttonTag = hit.collider.GetComponentInParent<ClickableSettingsButtonTag>();
+			}
+
+			if (buttonTag != null)
+			{
+				hoveredButton = buttonTag.gameObject;
+				hoveredAction = buttonTag.action;
+				hasHoveredAction = true;
+			}
+		}
+
+		HighlightSettingsButton(hoveredButton);
+
+		if (rightTriggerPressedThisFrame && hoveredButton != null && hasHoveredAction)
+		{
+			// Clickable settings panel layout and action fix: use explicit per-button action mapping.
+			ApplyClickableSetting(hoveredAction);
+		}
+	}
+
+	private void HighlightSettingsButton(GameObject buttonObject)
+	{
+		if (highlightedSettingsButton == buttonObject)
+		{
+			return;
+		}
+
+		for (int i = 0; i < settingsButtonRenderers.Count; i++)
+		{
+			Renderer renderer = settingsButtonRenderers[i];
+			if (renderer != null)
+			{
+				if (settingsButtonNormalMaterial != null)
+				{
+					renderer.sharedMaterial = settingsButtonNormalMaterial;
+				}
+				else
+				{
+					renderer.material.color = settingsButtonNormalColor;
+				}
+			}
+		}
+
+		highlightedSettingsButton = buttonObject;
+		if (highlightedSettingsButton == null)
+		{
+			return;
+		}
+
+		Renderer highlightedRenderer;
+		settingsButtonRendererLookup.TryGetValue(highlightedSettingsButton, out highlightedRenderer);
+		if (highlightedRenderer != null)
+		{
+			if (settingsButtonHighlightMaterial != null)
+			{
+				highlightedRenderer.sharedMaterial = settingsButtonHighlightMaterial;
+			}
+			else
+			{
+				highlightedRenderer.material.color = settingsButtonHighlightColor;
+			}
+		}
+	}
+
+	private void EnsureClickableSettingsButtonMaterials()
+	{
+		if (settingsButtonNormalMaterial != null && settingsButtonHighlightMaterial != null)
+		{
+			return;
+		}
+
+		// Clickable settings button render fix: prefer URP unlit, then built-in unlit, then standard.
+		Shader buttonShader = Shader.Find("Universal Render Pipeline/Unlit");
+		if (buttonShader == null)
+		{
+			buttonShader = Shader.Find("Unlit/Color");
+		}
+
+		if (buttonShader == null)
+		{
+			buttonShader = Shader.Find("Standard");
+		}
+
+		if (buttonShader == null)
+		{
+			return;
+		}
+
+		settingsButtonNormalMaterial = new Material(buttonShader);
+		settingsButtonNormalMaterial.color = settingsButtonNormalColor;
+
+		settingsButtonHighlightMaterial = new Material(buttonShader);
+		settingsButtonHighlightMaterial.color = settingsButtonHighlightColor;
+	}
+
+	private void ApplyClickableSetting(ClickableSettingAction action)
+	{
+		switch (action)
+		{
+			case ClickableSettingAction.DistanceOn:
+				showDistanceText = true;
+				break;
+
+			case ClickableSettingAction.DistanceOff:
+				showDistanceText = false;
+				if (distanceText != null)
+				{
+					distanceText.gameObject.SetActive(false);
+				}
+				break;
+
+			case ClickableSettingAction.UnitsMetric:
+				useImperialUnits = false;
+				break;
+
+			case ClickableSettingAction.UnitsImperial:
+				useImperialUnits = true;
+				break;
+
+			case ClickableSettingAction.AudioOn:
+				enableProximityAudio = true;
+				break;
+
+			case ClickableSettingAction.AudioOff:
+				enableProximityAudio = false;
+				break;
+
+			case ClickableSettingAction.Volume0:
+				proximityAudioVolume = 0f;
+				break;
+
+			case ClickableSettingAction.Volume25:
+				proximityAudioVolume = 0.25f;
+				break;
+
+			case ClickableSettingAction.Volume50:
+				proximityAudioVolume = 0.5f;
+				break;
+
+			case ClickableSettingAction.Volume75:
+				proximityAudioVolume = 0.75f;
+				break;
+
+			case ClickableSettingAction.Volume100:
+				proximityAudioVolume = 1f;
+				break;
+		}
+
+		if (proximityAudioSource != null)
+		{
+			proximityAudioSource.volume = proximityAudioVolume;
+		}
+
+		UpdateSettingsMenuText();
 	}
 
 	private void HandleSettingsMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
@@ -650,13 +1011,33 @@ public class SavedItemFinderExample : MonoBehaviour
 		string distanceValue = showDistanceText ? "On" : "Off";
 		string unitsValue = useImperialUnits ? "Imperial" : "Metric";
 		string audioValue = enableProximityAudio ? "On" : "Off";
+		string selectedSettingName = GetSelectedSettingsRowName();
 
+		// Clickable settings panel layout and action fix: keep top text short so it does not overlap buttons.
 		settingsMenuText.text = "Settings\n"
-			+ (selectedSettingsIndex == 0 ? "> " : "  ") + "Distance Text: " + distanceValue + "\n"
-			+ (selectedSettingsIndex == 1 ? "> " : "  ") + "Units: " + unitsValue + "\n"
-			+ (selectedSettingsIndex == 2 ? "> " : "  ") + "Audio: " + audioValue + "\n"
-			+ (selectedSettingsIndex == 3 ? "> " : "  ") + "Audio Volume: " + volumePercent + "%\n"
-			+ "A/B cycle, Trigger apply\nM / Left Secondary: Close";
+			+ "Distance: " + distanceValue + "   Units: " + unitsValue + "\n"
+			+ "Audio: " + audioValue + "   Volume: " + volumePercent + "%\n"
+			+ "A/B select: " + selectedSettingName + "\n"
+			+ "Left Trigger apply selected\n"
+			+ "Right Trigger click buttons\n"
+			+ "M / Left Secondary: Close";
+	}
+
+	private string GetSelectedSettingsRowName()
+	{
+		switch (selectedSettingsIndex)
+		{
+			case 0:
+				return "Distance";
+			case 1:
+				return "Units";
+			case 2:
+				return "Audio";
+			case 3:
+				return "Volume";
+			default:
+				return "Distance";
+		}
 	}
 
 	private void UpdateItemSelectionMenuTransform()
