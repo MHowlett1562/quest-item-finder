@@ -57,6 +57,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private bool isSettingsMenuOpen;
 	// World-space Canvas settings prototype: optional toggle so legacy runtime cube buttons remain fallback.
 	[SerializeField] private bool useWorldSpaceCanvasSettingsPanelPrototype;
+	// World-space Canvas find menu prototype: optional toggle so legacy TextMesh find menu remains fallback.
+	[SerializeField] private bool useWorldSpaceFindItemPanelPrototype;
 	// Enum app mode state cleanup: single source of truth for which primary mode owns input.
 	private AppMode currentMode = AppMode.Neutral;
 	private int selectedSettingsIndex;
@@ -241,7 +243,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (isItemSelectionMenuActive)
 		{
 			UpdateItemSelectionMenuTransform();
-			HandleItemSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+			// Canvas find item button action fix: skip A/B cycling while Canvas panel owns item selection.
+			if (!useWorldSpaceFindItemPanelPrototype)
+			{
+				HandleItemSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+			}
 		}
 
 		if (!IsSettingsMode() && findInputPressedThisFrame)
@@ -257,7 +263,9 @@ public class SavedItemFinderExample : MonoBehaviour
 			{
 				DisableSingleItemFindMode();
 			}
-			else if (isItemSelectionMenuActive)
+			// Canvas find item button action fix: skip trigger-confirm when Canvas panel handles selection;
+			// the Canvas button onClick already calls StartFindModeForItemName directly.
+			else if (isItemSelectionMenuActive && !useWorldSpaceFindItemPanelPrototype)
 			{
 				ConfirmItemSelectionAndStartFindMode();
 			}
@@ -1070,9 +1078,25 @@ public class SavedItemFinderExample : MonoBehaviour
 		itemSelectionMenuText.transform.localRotation = Quaternion.identity;
 	}
 
-	private void ShowItemSelectionMenu()
+	// Canvas find item menu prototype
+	private bool ShouldShowLegacyFindSelectionVisuals()
 	{
-		// MVP item selection UI: build a unique list of saved item names and show a tiny menu.
+		return !useWorldSpaceFindItemPanelPrototype;
+	}
+
+	// Canvas find item menu prototype
+	private void RefreshItemSelectionVisualState()
+	{
+		bool shouldShowLegacyVisuals = isItemSelectionMenuActive && ShouldShowLegacyFindSelectionVisuals();
+		if (itemSelectionMenuText != null)
+		{
+			itemSelectionMenuText.gameObject.SetActive(shouldShowLegacyVisuals);
+		}
+	}
+
+	// Canvas find item menu prototype
+	private List<string> BuildSelectableItemNames()
+	{
 		savedItemManager.LoadData();
 		List<SavedItemData> items = savedItemManager.GetAllItems();
 		if (items == null)
@@ -1098,18 +1122,35 @@ public class SavedItemFinderExample : MonoBehaviour
 			}
 		}
 
+		return selectableItemNames;
+	}
+
+	private void ShowItemSelectionMenu()
+	{
+		// MVP item selection UI: build a unique list of saved item names and show a tiny menu.
+		List<string> builtSelectableItemNames = BuildSelectableItemNames();
+
 		// MVP XR menu navigation: log source item counts and the unique menu options.
-		Debug.Log("MVP menu build: total saved items=" + items.Count + ", unique names=" + selectableItemNames.Count);
-		for (int i = 0; i < selectableItemNames.Count; i++)
+		Debug.Log("MVP menu build: unique names=" + builtSelectableItemNames.Count);
+		for (int i = 0; i < builtSelectableItemNames.Count; i++)
 		{
-			Debug.Log("MVP menu option " + i + ": " + selectableItemNames[i]);
+			Debug.Log("MVP menu option " + i + ": " + builtSelectableItemNames[i]);
 		}
 
-		if (selectableItemNames.Count == 0)
+		if (builtSelectableItemNames.Count == 0)
 		{
-			ShowTemporaryItemSelectionMessage("No saved items");
-			isItemSelectionMenuActive = false;
-			SetAppMode(AppMode.Neutral);
+			if (useWorldSpaceFindItemPanelPrototype)
+			{
+				isItemSelectionMenuActive = true;
+				SetAppMode(AppMode.FindSelecting);
+				RefreshItemSelectionVisualState();
+			}
+			else
+			{
+				ShowTemporaryItemSelectionMessage("No saved items");
+				isItemSelectionMenuActive = false;
+				SetAppMode(AppMode.Neutral);
+			}
 			return;
 		}
 
@@ -1125,7 +1166,7 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		EnsureItemSelectionMenuText();
 		UpdateItemSelectionMenuText();
-		itemSelectionMenuText.gameObject.SetActive(true);
+		RefreshItemSelectionVisualState();
 	}
 
 	private void HandleItemSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
@@ -1173,26 +1214,7 @@ public class SavedItemFinderExample : MonoBehaviour
 			selectedItemName = string.IsNullOrWhiteSpace(testItemName) ? "Unnamed Item" : testItemName;
 		}
 
-		HideItemSelectionMenu();
-		SpawnOneSavedItemByName(selectedItemName);
-
-		// Keep old keyboard/debug fallback available if selected lookup fails unexpectedly.
-		if (currentTargetItem == null && !string.IsNullOrWhiteSpace(testItemName) && selectedItemName != testItemName)
-		{
-			SpawnOneSavedItemByName(testItemName);
-		}
-
-		isSingleItemFindModeActive = currentTargetItem != null;
-		if (isSingleItemFindModeActive)
-		{
-			SetAppMode(AppMode.Finding);
-			lastHotColdDistance = -1f;
-			hotColdCheckTimer = 0f;
-		}
-		else
-		{
-			SetAppMode(AppMode.Neutral);
-		}
+		StartFindModeForItemName(selectedItemName);
 	}
 
 	private void UpdateItemSelectionMenuText()
@@ -1216,10 +1238,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		isItemSelectionMenuActive = false;
 
-		if (itemSelectionMenuText != null)
-		{
-			itemSelectionMenuText.gameObject.SetActive(false);
-		}
+		RefreshItemSelectionVisualState();
 
 		if (!IsSettingsMode() && !isSingleItemFindModeActive)
 		{
@@ -1623,6 +1642,12 @@ public class SavedItemFinderExample : MonoBehaviour
 		DisableSingleItemFindMode();
 	}
 
+	// Canvas find item menu prototype
+	public void CancelFindSelectionMenu()
+	{
+		HideItemSelectionMenu();
+	}
+
 	// Enum app mode state cleanup
 	public void SetAppMode(AppMode newMode)
 	{
@@ -1635,9 +1660,20 @@ public class SavedItemFinderExample : MonoBehaviour
 		RefreshSettingsVisualState();
 	}
 
+	public void SetUseWorldSpaceFindItemPanelPrototypeEnabled(bool isEnabled)
+	{
+		useWorldSpaceFindItemPanelPrototype = isEnabled;
+		RefreshItemSelectionVisualState();
+	}
+
 	public bool IsWorldSpaceCanvasSettingsPanelPrototypeEnabled()
 	{
 		return useWorldSpaceCanvasSettingsPanelPrototype;
+	}
+
+	public bool IsWorldSpaceFindItemPanelPrototypeEnabled()
+	{
+		return useWorldSpaceFindItemPanelPrototype;
 	}
 
 	// Enum app mode state cleanup
@@ -1656,6 +1692,48 @@ public class SavedItemFinderExample : MonoBehaviour
 	public bool IsFindMode()
 	{
 		return currentMode == AppMode.FindSelecting || currentMode == AppMode.Finding;
+	}
+
+	public bool IsFindSelectingMode()
+	{
+		return currentMode == AppMode.FindSelecting;
+	}
+
+	// Canvas find item menu prototype
+	public List<string> GetSelectableItemNamesForFindMenu()
+	{
+		List<string> builtSelectableItemNames = BuildSelectableItemNames();
+		return new List<string>(builtSelectableItemNames);
+	}
+
+	// Canvas find item menu prototype
+	public void StartFindModeForItemName(string selectedItemName)
+	{
+		if (string.IsNullOrWhiteSpace(selectedItemName))
+		{
+			selectedItemName = string.IsNullOrWhiteSpace(testItemName) ? "Unnamed Item" : testItemName;
+		}
+
+		HideItemSelectionMenu();
+		SpawnOneSavedItemByName(selectedItemName);
+
+		// Keep old keyboard/debug fallback available if selected lookup fails unexpectedly.
+		if (currentTargetItem == null && !string.IsNullOrWhiteSpace(testItemName) && selectedItemName != testItemName)
+		{
+			SpawnOneSavedItemByName(testItemName);
+		}
+
+		isSingleItemFindModeActive = currentTargetItem != null;
+		if (isSingleItemFindModeActive)
+		{
+			SetAppMode(AppMode.Finding);
+			lastHotColdDistance = -1f;
+			hotColdCheckTimer = 0f;
+		}
+		else
+		{
+			SetAppMode(AppMode.Neutral);
+		}
 	}
 
 	public bool IsDistanceTextEnabled()

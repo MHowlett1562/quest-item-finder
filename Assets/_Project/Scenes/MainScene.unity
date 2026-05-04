@@ -159,6 +159,7 @@ MonoBehaviour:
   enableProximityAudio: 1
   proximityAudioVolume: 0.5
   useWorldSpaceCanvasSettingsPanelPrototype: 0
+  useWorldSpaceFindItemPanelPrototype: 1
   targetMarkerMaterial: {fileID: 2100000, guid: b24112d9d81730444a9f89c3256f3923, type: 2}
   directionalIndicatorMaterial: {fileID: 2100000, guid: b24112d9d81730444a9f89c3256f3923, type: 2}
 --- !u!4 &57042103
@@ -532,6 +533,56 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 2021160907}
   m_SourcePrefab: {fileID: 100100000, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
+--- !u!1 &1908140012
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1908140014}
+  - component: {fileID: 1908140013}
+  m_Layer: 0
+  m_Name: WorldSpaceFindItemPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1908140013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1908140012}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d701bc4548068f40930178989846805, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  savedItemFinderExample: {fileID: 0}
+  worldSpaceCanvas: {fileID: 0}
+  autoCreateCanvasIfMissing: 1
+  canvasLocalPosition: {x: 0, y: 0.04, z: 1.15}
+  canvasLocalEulerAngles: {x: 0, y: 0, z: 0}
+  canvasLocalScale: {x: 0.0012, y: 0.0012, z: 0.0012}
+--- !u!4 &1908140014
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1908140012}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2021160901 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1767192433, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
@@ -614,3 +665,4 @@ SceneRoots:
   - {fileID: 1610979296}
   - {fileID: 2043560061}
   - {fileID: 771104716}
+  - {fileID: 1908140014}
