@@ -28,7 +28,7 @@ public class SavedItemFinderExample : MonoBehaviour
 
 	// Symmetric UI state conflict cleanup: expose read-only find UI state for other scripts.
 	public bool IsFindItemSelectionMenuOpen => isItemSelectionMenuActive;
-	public bool IsFindModeActive => isSingleItemFindModeActive;
+	public bool IsFindModeActive => IsFindMode();
 
 	[SerializeField] private string testItemName = "Keys";
 	// Temporary XR visual debugging toggles (Inspector) to isolate discomfort sources.
@@ -55,6 +55,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private bool isItemSelectionMenuActive;
 	// In-headset settings menu MVP: active while user adjusts quick test settings.
 	private bool isSettingsMenuOpen;
+	// Enum app mode state cleanup: single source of truth for which primary mode owns input.
+	private AppMode currentMode = AppMode.Neutral;
 	private int selectedSettingsIndex;
 	private Transform settingsButtonsParent;
 	private GameObject highlightedSettingsButton;
@@ -193,20 +195,10 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		if (settingsTogglePressedThisFrame)
 		{
-			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
-			{
-				savedItemExample.CancelNameSelectionMenu();
-			}
-
-			if (isItemSelectionMenuActive)
-			{
-				HideItemSelectionMenu();
-			}
-
 			ToggleSettingsMenu();
 		}
 
-		if (isSettingsMenuOpen)
+		if (IsSettingsMode())
 		{
 			// Settings modal input and button readability fix: treat settings as modal UI and block save/find handling.
 			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
@@ -229,7 +221,7 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		// MVP input conflict cleanup: reserve A/B for active menus by gating show-all while save-name menu is open.
 		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
-		if (!isSettingsMenuOpen && (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame)))
+		if (!IsSettingsMode() && (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame)))
 		{
 			if (isSaveNameMenuOpen)
 			{
@@ -247,7 +239,7 @@ public class SavedItemFinderExample : MonoBehaviour
 			HandleItemSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
 		}
 
-		if (!isSettingsMenuOpen && findInputPressedThisFrame)
+		if (!IsSettingsMode() && findInputPressedThisFrame)
 		{
 			if (isSaveNameMenuOpen)
 			{
@@ -575,10 +567,26 @@ public class SavedItemFinderExample : MonoBehaviour
 
 	private void ToggleSettingsMenu()
 	{
-		if (isSettingsMenuOpen)
+		if (IsSettingsMode())
 		{
 			HideSettingsMenu();
+			SetAppMode(AppMode.Neutral);
 			return;
+		}
+
+		// Enum app mode state cleanup: entering settings closes other primary UI modes first.
+		if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
+		{
+			savedItemExample.CancelNameSelectionMenu();
+		}
+
+		if (isSingleItemFindModeActive)
+		{
+			DisableSingleItemFindMode();
+		}
+		else if (isItemSelectionMenuActive)
+		{
+			HideItemSelectionMenu();
 		}
 
 		isSettingsMenuOpen = true;
@@ -592,6 +600,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		UpdateSettingsMenuText();
 		settingsMenuText.gameObject.SetActive(true);
 		SetSettingsButtonsVisible(true);
+		SetAppMode(AppMode.Settings);
 	}
 
 	private void HideSettingsMenu()
@@ -1095,6 +1104,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		{
 			ShowTemporaryItemSelectionMessage("No saved items");
 			isItemSelectionMenuActive = false;
+			SetAppMode(AppMode.Neutral);
 			return;
 		}
 
@@ -1106,6 +1116,7 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		selectedItemNameIndex = 0;
 		isItemSelectionMenuActive = true;
+		SetAppMode(AppMode.FindSelecting);
 
 		EnsureItemSelectionMenuText();
 		UpdateItemSelectionMenuText();
@@ -1169,8 +1180,13 @@ public class SavedItemFinderExample : MonoBehaviour
 		isSingleItemFindModeActive = currentTargetItem != null;
 		if (isSingleItemFindModeActive)
 		{
+			SetAppMode(AppMode.Finding);
 			lastHotColdDistance = -1f;
 			hotColdCheckTimer = 0f;
+		}
+		else
+		{
+			SetAppMode(AppMode.Neutral);
 		}
 	}
 
@@ -1198,6 +1214,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (itemSelectionMenuText != null)
 		{
 			itemSelectionMenuText.gameObject.SetActive(false);
+		}
+
+		if (!IsSettingsMode() && !isSingleItemFindModeActive)
+		{
+			SetAppMode(AppMode.Neutral);
 		}
 	}
 
@@ -1531,9 +1552,16 @@ public class SavedItemFinderExample : MonoBehaviour
 			hotColdText.gameObject.SetActive(false);
 		}
 
-		HideSettingsMenu();
+		if (!IsSettingsMode())
+		{
+			HideSettingsMenu();
+		}
 
 		ClearSpawnedMarkers();
+		if (!IsSettingsMode())
+		{
+			SetAppMode(AppMode.Neutral);
+		}
 	}
 
 	private void UpdateProximityAudio(float distance)
@@ -1588,6 +1616,30 @@ public class SavedItemFinderExample : MonoBehaviour
 	{
 		// Symmetric UI state conflict cleanup: close find menu/find mode UI without changing saved data.
 		DisableSingleItemFindMode();
+	}
+
+	// Enum app mode state cleanup
+	public void SetAppMode(AppMode newMode)
+	{
+		currentMode = newMode;
+	}
+
+	// Enum app mode state cleanup
+	public bool IsSettingsMode()
+	{
+		return currentMode == AppMode.Settings;
+	}
+
+	// Enum app mode state cleanup
+	public bool IsSaveMode()
+	{
+		return currentMode == AppMode.SaveNaming;
+	}
+
+	// Enum app mode state cleanup
+	public bool IsFindMode()
+	{
+		return currentMode == AppMode.FindSelecting || currentMode == AppMode.Finding;
 	}
 
 	private void UpdateControllerClearAllHold(bool rightPrimaryButtonPressed, bool rightSecondaryButtonPressed)

@@ -70,6 +70,22 @@ public class SavedItemExample : MonoBehaviour
             rightHandDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out rightSecondaryButtonPressed);
         }
 
+        // Enum app mode state cleanup: settings mode owns trigger input, so save flow is fully blocked.
+        if (savedItemFinderExample != null && savedItemFinderExample.IsSettingsMode())
+        {
+            if (isNameSelectionMenuOpen)
+            {
+                HideNameSelectionMenu();
+            }
+
+            UpdateAimMarker(false);
+            DisableControllerRayVisual();
+            wasRightTriggerPressed = rightTriggerPressed;
+            wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
+            wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
+            return;
+        }
+
         UpdateAimMarker(rightTriggerPressed);
 		UpdateControllerRayVisual();
 
@@ -103,9 +119,12 @@ public class SavedItemExample : MonoBehaviour
         if (saveInputPressedThisFrame && !isNameSelectionMenuOpen)
         {
             // Symmetric UI state conflict cleanup: close find UI before opening save UI.
-            if (savedItemFinderExample != null && (savedItemFinderExample.IsFindItemSelectionMenuOpen || savedItemFinderExample.IsFindModeActive))
+            if (savedItemFinderExample != null)
             {
-                savedItemFinderExample.CancelFindModeAndMenu();
+				if (savedItemFinderExample.IsSettingsMode() || savedItemFinderExample.IsFindMode())
+				{
+					savedItemFinderExample.CancelFindModeAndMenu();
+				}
             }
 
             ShowNameSelectionMenu();
@@ -192,6 +211,12 @@ public class SavedItemExample : MonoBehaviour
         isNameSelectionMenuOpen = true;
         selectedPresetNameIndex = 0;
 
+		if (savedItemFinderExample != null)
+		{
+			// Enum app mode state cleanup: save naming is now the active primary mode.
+			savedItemFinderExample.SetAppMode(AppMode.SaveNaming);
+		}
+
         EnsureNameSelectionMenuText();
         UpdateNameSelectionMenuText();
         nameSelectionMenuText.gameObject.SetActive(true);
@@ -200,6 +225,12 @@ public class SavedItemExample : MonoBehaviour
     private void HideNameSelectionMenu()
     {
         isNameSelectionMenuOpen = false;
+
+		if (savedItemFinderExample != null && savedItemFinderExample.IsSaveMode())
+		{
+			// Enum app mode state cleanup: leaving save naming returns to neutral unless another mode takes over.
+			savedItemFinderExample.SetAppMode(AppMode.Neutral);
+		}
 
         if (nameSelectionMenuText != null)
         {
