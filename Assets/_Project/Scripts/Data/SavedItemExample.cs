@@ -25,6 +25,9 @@ public class SavedItemExample : MonoBehaviour
     // MVP preset name selection UI: simple preset names for headset-friendly item naming.
     [SerializeField] private string[] presetItemNames = { "Keys", "Wallet", "Remote" };
 
+    // Canvas save name menu prototype: optional toggle to use World Space Canvas panel instead of TextMesh fallback.
+    [SerializeField] private bool useWorldSpaceCanvasSaveNamePanelPrototype;
+
     // Save Placement UX improvement: optional scene reference for right controller ray origin.
     [SerializeField] private Transform rightControllerTransform;
     // Save Placement UX improvement: optional visual marker for current controller hit point.
@@ -100,7 +103,11 @@ public class SavedItemExample : MonoBehaviour
         if (isNameSelectionMenuOpen)
         {
             UpdateNameSelectionMenuTransform();
-            HandleNameSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+            // Canvas save name menu prototype: skip A/B cycling while Canvas panel owns name selection.
+            if (!useWorldSpaceCanvasSaveNamePanelPrototype)
+            {
+                HandleNameSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
+            }
         }
 
         bool saveInputPressedThisFrame = Input.GetKeyDown(KeyCode.K) || rightTriggerPressedThisFrame;
@@ -134,6 +141,13 @@ public class SavedItemExample : MonoBehaviour
         if (!isNameSelectionMenuOpen)
         {
             ShowNameSelectionMenu();
+            return;
+        }
+
+        // Canvas save name menu prototype: skip trigger-confirm while Canvas panel handles name selection;
+        // the Canvas button onClick calls SaveItemWithName directly.
+        if (useWorldSpaceCanvasSaveNamePanelPrototype)
+        {
             return;
         }
 
@@ -219,7 +233,8 @@ public class SavedItemExample : MonoBehaviour
 
         EnsureNameSelectionMenuText();
         UpdateNameSelectionMenuText();
-        nameSelectionMenuText.gameObject.SetActive(true);
+        // Canvas save name menu prototype: hide legacy text when Canvas panel is active.
+        RefreshSaveNameMenuVisualState();
     }
 
     private void HideNameSelectionMenu()
@@ -232,10 +247,8 @@ public class SavedItemExample : MonoBehaviour
 			savedItemFinderExample.SetAppMode(AppMode.Neutral);
 		}
 
-        if (nameSelectionMenuText != null)
-        {
-            nameSelectionMenuText.gameObject.SetActive(false);
-        }
+        // Canvas save name menu prototype: hide legacy text (always false on hide since isNameSelectionMenuOpen is now false).
+        RefreshSaveNameMenuVisualState();
 
         if (aimMarker != null)
         {
@@ -501,5 +514,69 @@ public class SavedItemExample : MonoBehaviour
         {
             saveFeedbackText.gameObject.SetActive(false);
         }
+    }
+
+    // Canvas save name menu prototype: show/hide the legacy TextMesh based on which panel is active.
+    private void RefreshSaveNameMenuVisualState()
+    {
+        bool shouldShowLegacyText = isNameSelectionMenuOpen && !useWorldSpaceCanvasSaveNamePanelPrototype;
+        if (nameSelectionMenuText != null)
+        {
+            nameSelectionMenuText.gameObject.SetActive(shouldShowLegacyText);
+        }
+    }
+
+    // Canvas save name menu prototype: perform a full save using the given name and current placement position.
+    public void SaveItemWithName(string name)
+    {
+        if (savedItemManager == null)
+        {
+            Debug.Log("No SavedItemManager found in the scene.");
+            return;
+        }
+
+        string resolvedName = string.IsNullOrWhiteSpace(name) ? "Unnamed Item" : name;
+
+        SavedItemData savedItem = new SavedItemData();
+        savedItem.itemId = System.Guid.NewGuid().ToString();
+        savedItem.itemName = resolvedName;
+        savedItem.lastKnownPosition = GetSavePlacementPosition();
+        savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+
+        bool isDuplicate = false;
+        System.Collections.Generic.List<SavedItemData> existingItems = savedItemManager.GetAllItems();
+        for (int i = 0; i < existingItems.Count; i++)
+        {
+            if (existingItems[i] != null && existingItems[i].itemName == resolvedName)
+            {
+                isDuplicate = true;
+                break;
+            }
+        }
+
+        savedItemManager.AddItem(savedItem);
+        savedItemManager.SaveData();
+
+        string feedbackMessage = isDuplicate
+            ? "Saved duplicate: " + resolvedName
+            : "Saved: " + resolvedName;
+        ShowTemporarySaveFeedback(feedbackMessage);
+
+        Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
+
+        HideNameSelectionMenu();
+    }
+
+    // Canvas save name menu prototype: called by WorldSpaceSaveNamePanelPrototype on enable/disable.
+    public void SetUseWorldSpaceCanvasSaveNamePanelPrototypeEnabled(bool isEnabled)
+    {
+        useWorldSpaceCanvasSaveNamePanelPrototype = isEnabled;
+        RefreshSaveNameMenuVisualState();
+    }
+
+    // Canvas save name menu prototype: queried by WorldSpaceSaveNamePanelPrototype to decide show/hide.
+    public bool IsWorldSpaceCanvasSaveNamePanelPrototypeEnabled()
+    {
+        return useWorldSpaceCanvasSaveNamePanelPrototype;
     }
 }
