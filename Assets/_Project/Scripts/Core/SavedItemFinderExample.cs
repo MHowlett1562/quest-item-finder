@@ -55,6 +55,8 @@ public class SavedItemFinderExample : MonoBehaviour
 	private bool isItemSelectionMenuActive;
 	// In-headset settings menu MVP: active while user adjusts quick test settings.
 	private bool isSettingsMenuOpen;
+	// World-space Canvas settings prototype: optional toggle so legacy runtime cube buttons remain fallback.
+	[SerializeField] private bool useWorldSpaceCanvasSettingsPanelPrototype;
 	// Enum app mode state cleanup: single source of truth for which primary mode owns input.
 	private AppMode currentMode = AppMode.Neutral;
 	private int selectedSettingsIndex;
@@ -207,7 +209,10 @@ public class SavedItemFinderExample : MonoBehaviour
 			}
 
 			UpdateSettingsMenuTransform();
-			UpdateClickableSettingsPanel(rightTriggerPressedThisFrame);
+			if (!useWorldSpaceCanvasSettingsPanelPrototype)
+			{
+				UpdateClickableSettingsPanel(rightTriggerPressedThisFrame);
+			}
 			HandleSettingsMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
 			if (leftTriggerPressedThisFrame)
 			{
@@ -565,6 +570,29 @@ public class SavedItemFinderExample : MonoBehaviour
 		settingsMenuText.transform.localRotation = Quaternion.identity;
 	}
 
+	// Canvas settings UI cleanup
+	private bool ShouldShowLegacySettingsVisuals()
+	{
+		return !useWorldSpaceCanvasSettingsPanelPrototype;
+	}
+
+	// Canvas settings UI cleanup
+	private void RefreshSettingsVisualState()
+	{
+		bool shouldShowLegacyVisuals = isSettingsMenuOpen && ShouldShowLegacySettingsVisuals();
+
+		if (settingsMenuText != null)
+		{
+			settingsMenuText.gameObject.SetActive(shouldShowLegacyVisuals);
+		}
+
+		SetSettingsButtonsVisible(shouldShowLegacyVisuals);
+		if (!shouldShowLegacyVisuals)
+		{
+			HighlightSettingsButton(null);
+		}
+	}
+
 	private void ToggleSettingsMenu()
 	{
 		if (IsSettingsMode())
@@ -598,8 +626,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		EnsureSettingsMenuText();
 		EnsureClickableSettingsButtons();
 		UpdateSettingsMenuText();
-		settingsMenuText.gameObject.SetActive(true);
-		SetSettingsButtonsVisible(true);
+		RefreshSettingsVisualState();
 		SetAppMode(AppMode.Settings);
 	}
 
@@ -863,60 +890,49 @@ public class SavedItemFinderExample : MonoBehaviour
 		switch (action)
 		{
 			case ClickableSettingAction.DistanceOn:
-				showDistanceText = true;
+				SetDistanceText(true);
 				break;
 
 			case ClickableSettingAction.DistanceOff:
-				showDistanceText = false;
-				if (distanceText != null)
-				{
-					distanceText.gameObject.SetActive(false);
-				}
+				SetDistanceText(false);
 				break;
 
 			case ClickableSettingAction.UnitsMetric:
-				useImperialUnits = false;
+				SetUseImperialUnits(false);
 				break;
 
 			case ClickableSettingAction.UnitsImperial:
-				useImperialUnits = true;
+				SetUseImperialUnits(true);
 				break;
 
 			case ClickableSettingAction.AudioOn:
-				enableProximityAudio = true;
+				SetProximityAudio(true);
 				break;
 
 			case ClickableSettingAction.AudioOff:
-				enableProximityAudio = false;
+				SetProximityAudio(false);
 				break;
 
 			case ClickableSettingAction.Volume0:
-				proximityAudioVolume = 0f;
+				SetProximityAudioVolume(0f);
 				break;
 
 			case ClickableSettingAction.Volume25:
-				proximityAudioVolume = 0.25f;
+				SetProximityAudioVolume(0.25f);
 				break;
 
 			case ClickableSettingAction.Volume50:
-				proximityAudioVolume = 0.5f;
+				SetProximityAudioVolume(0.5f);
 				break;
 
 			case ClickableSettingAction.Volume75:
-				proximityAudioVolume = 0.75f;
+				SetProximityAudioVolume(0.75f);
 				break;
 
 			case ClickableSettingAction.Volume100:
-				proximityAudioVolume = 1f;
+				SetProximityAudioVolume(1f);
 				break;
 		}
-
-		if (proximityAudioSource != null)
-		{
-			proximityAudioSource.volume = proximityAudioVolume;
-		}
-
-		UpdateSettingsMenuText();
 	}
 
 	private void HandleSettingsMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
@@ -962,51 +978,40 @@ public class SavedItemFinderExample : MonoBehaviour
 		switch (selectedSettingsIndex)
 		{
 			case 0:
-				showDistanceText = !showDistanceText;
-				if (!showDistanceText && distanceText != null)
-				{
-					distanceText.gameObject.SetActive(false);
-				}
+				SetDistanceText(!showDistanceText);
 				break;
 
 			case 1:
-				useImperialUnits = !useImperialUnits;
+				SetUseImperialUnits(!useImperialUnits);
 				break;
 
 			case 2:
-				enableProximityAudio = !enableProximityAudio;
+				SetProximityAudio(!enableProximityAudio);
 				break;
 
 			case 3:
 				if (Mathf.Approximately(proximityAudioVolume, 0f))
 				{
-					proximityAudioVolume = 0.25f;
+					SetProximityAudioVolume(0.25f);
 				}
 				else if (Mathf.Approximately(proximityAudioVolume, 0.25f))
 				{
-					proximityAudioVolume = 0.5f;
+					SetProximityAudioVolume(0.5f);
 				}
 				else if (Mathf.Approximately(proximityAudioVolume, 0.5f))
 				{
-					proximityAudioVolume = 0.75f;
+					SetProximityAudioVolume(0.75f);
 				}
 				else if (Mathf.Approximately(proximityAudioVolume, 0.75f))
 				{
-					proximityAudioVolume = 1f;
+					SetProximityAudioVolume(1f);
 				}
 				else
 				{
-					proximityAudioVolume = 0f;
+					SetProximityAudioVolume(0f);
 				}
 				break;
 		}
-
-		if (proximityAudioSource != null)
-		{
-			proximityAudioSource.volume = proximityAudioVolume;
-		}
-
-		UpdateSettingsMenuText();
 	}
 
 	private void UpdateSettingsMenuText()
@@ -1624,6 +1629,17 @@ public class SavedItemFinderExample : MonoBehaviour
 		currentMode = newMode;
 	}
 
+	public void SetUseWorldSpaceCanvasSettingsPanelPrototypeEnabled(bool isEnabled)
+	{
+		useWorldSpaceCanvasSettingsPanelPrototype = isEnabled;
+		RefreshSettingsVisualState();
+	}
+
+	public bool IsWorldSpaceCanvasSettingsPanelPrototypeEnabled()
+	{
+		return useWorldSpaceCanvasSettingsPanelPrototype;
+	}
+
 	// Enum app mode state cleanup
 	public bool IsSettingsMode()
 	{
@@ -1640,6 +1656,60 @@ public class SavedItemFinderExample : MonoBehaviour
 	public bool IsFindMode()
 	{
 		return currentMode == AppMode.FindSelecting || currentMode == AppMode.Finding;
+	}
+
+	public bool IsDistanceTextEnabled()
+	{
+		return showDistanceText;
+	}
+
+	public bool IsUsingImperialUnits()
+	{
+		return useImperialUnits;
+	}
+
+	public bool IsProximityAudioEnabled()
+	{
+		return enableProximityAudio;
+	}
+
+	public float GetProximityAudioVolume()
+	{
+		return proximityAudioVolume;
+	}
+
+	public void SetDistanceText(bool isEnabled)
+	{
+		showDistanceText = isEnabled;
+		if (!showDistanceText && distanceText != null)
+		{
+			distanceText.gameObject.SetActive(false);
+		}
+
+		UpdateSettingsMenuText();
+	}
+
+	public void SetUseImperialUnits(bool isEnabled)
+	{
+		useImperialUnits = isEnabled;
+		UpdateSettingsMenuText();
+	}
+
+	public void SetProximityAudio(bool isEnabled)
+	{
+		enableProximityAudio = isEnabled;
+		UpdateSettingsMenuText();
+	}
+
+	public void SetProximityAudioVolume(float volume)
+	{
+		proximityAudioVolume = Mathf.Clamp01(volume);
+		if (proximityAudioSource != null)
+		{
+			proximityAudioSource.volume = proximityAudioVolume;
+		}
+
+		UpdateSettingsMenuText();
 	}
 
 	private void UpdateControllerClearAllHold(bool rightPrimaryButtonPressed, bool rightSecondaryButtonPressed)
