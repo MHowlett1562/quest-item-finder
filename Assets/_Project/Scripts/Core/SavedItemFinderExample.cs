@@ -205,7 +205,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (IsSettingsMode())
 		{
 			// Settings modal input and button readability fix: treat settings as modal UI and block save/find handling.
-			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
+			if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen())
 			{
 				savedItemExample.CancelNameSelectionMenu();
 			}
@@ -227,7 +227,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		UpdateControllerClearAllHold(rightPrimaryButtonPressed, rightSecondaryButtonPressed);
 
 		// MVP input conflict cleanup: reserve A/B for active menus by gating show-all while save-name menu is open.
-		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen;
+		bool isSaveNameMenuOpen = savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen();
 		if (!IsSettingsMode() && (Input.GetKeyDown(KeyCode.F) || (!isItemSelectionMenuActive && !isSaveNameMenuOpen && rightPrimaryButtonPressedThisFrame)))
 		{
 			if (isSaveNameMenuOpen)
@@ -611,7 +611,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		// Enum app mode state cleanup: entering settings closes other primary UI modes first.
-		if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen)
+		if (savedItemExample != null && savedItemExample.IsNameSelectionMenuOpen())
 		{
 			savedItemExample.CancelNameSelectionMenu();
 		}

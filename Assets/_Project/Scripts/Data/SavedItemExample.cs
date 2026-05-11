@@ -12,13 +12,12 @@ public class SavedItemExample : MonoBehaviour
     private TextMesh saveFeedbackText;
     private LineRenderer controllerRayLine;
 
-    // MVP input conflict cleanup: expose whether save-name menu is open so other scripts can gate shared inputs.
-    public bool IsNameSelectionMenuOpen => isNameSelectionMenuOpen;
-    private TextMesh nameSelectionMenuText;
-    // MVP preset name selection UI: true while preset-name menu is shown.
+    // Placement-first, naming-second UX: pending save state until user confirms the name.
+    private Vector3 pendingSavePosition;
+    private bool hasPendingSavePosition;
+    private GameObject pendingSaveMarker;
     private bool isNameSelectionMenuOpen;
-    // MVP preset name selection UI: currently selected preset index in the name menu.
-    private int selectedPresetNameIndex;
+    private bool wasRightTriggerPressedForPlacement;
     
     // MVP naming feedback: item name set in the Inspector for testing without a keyboard.
     [SerializeField] private string testItemName = "Keys";
@@ -81,6 +80,7 @@ public class SavedItemExample : MonoBehaviour
                 HideNameSelectionMenu();
             }
 
+            wasRightTriggerPressedForPlacement = false;
             UpdateAimMarker(false);
             DisableControllerRayVisual();
             wasRightTriggerPressed = rightTriggerPressed;
@@ -90,140 +90,67 @@ public class SavedItemExample : MonoBehaviour
         }
 
         UpdateAimMarker(rightTriggerPressed);
-		UpdateControllerRayVisual();
+        UpdateControllerRayVisual();
 
-        bool rightTriggerPressedThisFrame = rightTriggerPressed && !wasRightTriggerPressed;
-        bool rightPrimaryButtonPressedThisFrame = rightPrimaryButtonPressed && !wasRightPrimaryButtonPressed;
-        bool rightSecondaryButtonPressedThisFrame = rightSecondaryButtonPressed && !wasRightSecondaryButtonPressed;
+        // Placement-first, naming-second UX: capture placement on trigger release, not press.
+        if (!isNameSelectionMenuOpen)
+        {
+            if (rightTriggerPressed)
+            {
+                // Trigger held: mark that we've detected a press so we can detect the release.
+                wasRightTriggerPressedForPlacement = true;
+            }
+            else if (wasRightTriggerPressedForPlacement)
+            {
+                // Trigger released after being pressed: capture placement and open naming menu.
+                wasRightTriggerPressedForPlacement = false;
+
+                // Symmetric UI state conflict cleanup: close find UI before opening save UI.
+                if (savedItemFinderExample != null)
+                {
+                    if (savedItemFinderExample.IsSettingsMode() || savedItemFinderExample.IsFindMode())
+                    {
+                        savedItemFinderExample.CancelFindModeAndMenu();
+                    }
+                }
+
+                BeginNamingForPendingPlacement();
+            }
+        }
+
+        // Handle keyboard shortcut for save (K key).
+        if (Input.GetKeyDown(KeyCode.K) && !isNameSelectionMenuOpen)
+        {
+            if (savedItemManager != null)
+            {
+                // Symmetric UI state conflict cleanup: close find UI before opening save UI.
+                if (savedItemFinderExample != null)
+                {
+                    if (savedItemFinderExample.IsSettingsMode() || savedItemFinderExample.IsFindMode())
+                    {
+                        savedItemFinderExample.CancelFindModeAndMenu();
+                    }
+                }
+
+                BeginNamingForPendingPlacement();
+            }
+            else
+            {
+                Debug.Log("No SavedItemManager found in the scene.");
+            }
+        }
 
         wasRightTriggerPressed = rightTriggerPressed;
         wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
         wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
-
-        if (isNameSelectionMenuOpen)
-        {
-            UpdateNameSelectionMenuTransform();
-            // Canvas save name menu prototype: skip A/B cycling while Canvas panel owns name selection.
-            if (!useWorldSpaceCanvasSaveNamePanelPrototype)
-            {
-                HandleNameSelectionMenuCyclingInput(rightPrimaryButtonPressedThisFrame, rightSecondaryButtonPressedThisFrame);
-            }
-        }
-
-        bool saveInputPressedThisFrame = Input.GetKeyDown(KeyCode.K) || rightTriggerPressedThisFrame;
-
-        if (!saveInputPressedThisFrame)
-        {
-            return;
-        }
-
-        if (savedItemManager == null)
-        {
-            Debug.Log("No SavedItemManager found in the scene.");
-            return;
-        }
-
-        if (saveInputPressedThisFrame && !isNameSelectionMenuOpen)
-        {
-            // Symmetric UI state conflict cleanup: close find UI before opening save UI.
-            if (savedItemFinderExample != null)
-            {
-				if (savedItemFinderExample.IsSettingsMode() || savedItemFinderExample.IsFindMode())
-				{
-					savedItemFinderExample.CancelFindModeAndMenu();
-				}
-            }
-
-            ShowNameSelectionMenu();
-            return;
-        }
-
-        if (!isNameSelectionMenuOpen)
-        {
-            ShowNameSelectionMenu();
-            return;
-        }
-
-        // Canvas save name menu prototype: skip trigger-confirm while Canvas panel handles name selection;
-        // the Canvas button onClick calls SaveItemWithName directly.
-        if (useWorldSpaceCanvasSaveNamePanelPrototype)
-        {
-            return;
-        }
-
-        string resolvedName = GetSelectedNameForSave();
-        HideNameSelectionMenu();
-
-        // MVP naming feedback: resolve the item name with fallback to "Unnamed Item".
-        SavedItemData savedItem = new SavedItemData();
-        savedItem.itemId = System.Guid.NewGuid().ToString();
-        savedItem.itemName = resolvedName;
-        savedItem.lastKnownPosition = GetSavePlacementPosition();
-        savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
-
-        // MVP naming feedback: check for a duplicate name before saving.
-        bool isDuplicate = false;
-        System.Collections.Generic.List<SavedItemData> existingItems = savedItemManager.GetAllItems();
-        for (int i = 0; i < existingItems.Count; i++)
-        {
-            if (existingItems[i] != null && existingItems[i].itemName == resolvedName)
-            {
-                isDuplicate = true;
-                break;
-            }
-        }
-
-        savedItemManager.AddItem(savedItem);
-        savedItemManager.SaveData();
-
-        // MVP naming feedback: show "Saved duplicate" when the name already existed.
-        string feedbackMessage = isDuplicate
-            ? "Saved duplicate: " + resolvedName
-            : "Saved: " + resolvedName;
-        ShowTemporarySaveFeedback(feedbackMessage);
-
-        Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
     }
 
-    private void EnsureNameSelectionMenuText()
-    {
-        if (nameSelectionMenuText != null)
-        {
-            return;
-        }
 
-        GameObject nameSelectionMenuObject = new GameObject("SaveNameSelectionMenuText");
-        nameSelectionMenuText = nameSelectionMenuObject.AddComponent<TextMesh>();
-        nameSelectionMenuText.fontSize = 56;
-        nameSelectionMenuText.characterSize = 0.01f;
-        nameSelectionMenuText.anchor = TextAnchor.MiddleCenter;
-        nameSelectionMenuText.alignment = TextAlignment.Center;
-        nameSelectionMenuText.color = Color.white;
-        nameSelectionMenuText.gameObject.SetActive(false);
-        UpdateNameSelectionMenuTransform();
-    }
-
-    private void UpdateNameSelectionMenuTransform()
-    {
-        if (nameSelectionMenuText == null || Camera.main == null)
-        {
-            return;
-        }
-
-        if (nameSelectionMenuText.transform.parent != Camera.main.transform)
-        {
-            nameSelectionMenuText.transform.SetParent(Camera.main.transform, false);
-        }
-
-        nameSelectionMenuText.transform.localPosition = nameSelectionMenuLocalOffset;
-        nameSelectionMenuText.transform.localRotation = Quaternion.identity;
-    }
 
     private void ShowNameSelectionMenu()
     {
         // MVP preset name selection UI: open simple headset menu before save instead of typing a name.
         isNameSelectionMenuOpen = true;
-        selectedPresetNameIndex = 0;
 
 		if (savedItemFinderExample != null)
 		{
@@ -231,9 +158,7 @@ public class SavedItemExample : MonoBehaviour
 			savedItemFinderExample.SetAppMode(AppMode.SaveNaming);
 		}
 
-        EnsureNameSelectionMenuText();
-        UpdateNameSelectionMenuText();
-        // Canvas save name menu prototype: hide legacy text when Canvas panel is active.
+        // Canvas save name menu prototype: Canvas panel is shown via WorldSpaceSaveNamePanelPrototype.
         RefreshSaveNameMenuVisualState();
     }
 
@@ -247,7 +172,7 @@ public class SavedItemExample : MonoBehaviour
 			savedItemFinderExample.SetAppMode(AppMode.Neutral);
 		}
 
-        // Canvas save name menu prototype: hide legacy text (always false on hide since isNameSelectionMenuOpen is now false).
+        // Canvas save name menu prototype: Canvas panel is hidden via WorldSpaceSaveNamePanelPrototype.
         RefreshSaveNameMenuVisualState();
 
         if (aimMarker != null)
@@ -262,72 +187,21 @@ public class SavedItemExample : MonoBehaviour
     {
         // UI state conflict cleanup: close save UI visuals without saving anything.
         HideNameSelectionMenu();
-    }
-
-    private void HandleNameSelectionMenuCyclingInput(bool rightPrimaryButtonPressedThisFrame, bool rightSecondaryButtonPressedThisFrame)
-    {
-        if (!isNameSelectionMenuOpen || presetItemNames == null || presetItemNames.Length == 0)
+        
+        // Placement-first, naming-second UX: discard pending save position and marker.
+        hasPendingSavePosition = false;
+        if (pendingSaveMarker != null)
         {
-            return;
-        }
-
-        // MVP preset name selection UI: cycle presets with controller A/B and keyboard fallback.
-        if (rightPrimaryButtonPressedThisFrame || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
-        {
-            selectedPresetNameIndex++;
-            if (selectedPresetNameIndex >= presetItemNames.Length)
-            {
-                selectedPresetNameIndex = 0;
-            }
-
-            UpdateNameSelectionMenuText();
-        }
-
-        if (rightSecondaryButtonPressedThisFrame || Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
-        {
-            selectedPresetNameIndex--;
-            if (selectedPresetNameIndex < 0)
-            {
-                selectedPresetNameIndex = presetItemNames.Length - 1;
-            }
-
-            UpdateNameSelectionMenuText();
+            Destroy(pendingSaveMarker);
+            pendingSaveMarker = null;
         }
     }
 
-    private void UpdateNameSelectionMenuText()
+
+
+    public bool IsNameSelectionMenuOpen()
     {
-        if (nameSelectionMenuText == null)
-        {
-            return;
-        }
-
-        nameSelectionMenuText.text = "Name item\n" + GetSelectedNameForSave() + "\nA/B to cycle\nRight Trigger to save";
-    }
-
-    private string GetSelectedNameForSave()
-    {
-        if (presetItemNames != null && presetItemNames.Length > 0)
-        {
-            if (selectedPresetNameIndex < 0 || selectedPresetNameIndex >= presetItemNames.Length)
-            {
-                selectedPresetNameIndex = 0;
-            }
-
-            string selectedPresetName = presetItemNames[selectedPresetNameIndex];
-            if (!string.IsNullOrWhiteSpace(selectedPresetName))
-            {
-                return selectedPresetName;
-            }
-        }
-
-        // Keep Inspector fallback for keyboard/debug usage when presets are unavailable.
-        if (!string.IsNullOrWhiteSpace(testItemName))
-        {
-            return testItemName;
-        }
-
-        return "Unnamed Item";
+        return isNameSelectionMenuOpen;
     }
 
     private Vector3 GetSavePlacementPosition()
@@ -516,18 +390,82 @@ public class SavedItemExample : MonoBehaviour
         }
     }
 
-    // Canvas save name menu prototype: show/hide the legacy TextMesh based on which panel is active.
+    // Canvas save name menu prototype: show/hide the Canvas panel based on app mode.
     private void RefreshSaveNameMenuVisualState()
     {
-        bool shouldShowLegacyText = isNameSelectionMenuOpen && !useWorldSpaceCanvasSaveNamePanelPrototype;
-        if (nameSelectionMenuText != null)
-        {
-            nameSelectionMenuText.gameObject.SetActive(shouldShowLegacyText);
-        }
+        // Canvas panel visibility is managed by WorldSpaceSaveNamePanelPrototype based on app mode.
     }
 
-    // Canvas save name menu prototype: perform a full save using the given name and current placement position.
-    public void SaveItemWithName(string name)
+    // Placement-first, naming-second UX: store current placement and open naming menu.
+    private void BeginNamingForPendingPlacement()
+    {
+        pendingSavePosition = GetSavePlacementPosition();
+        hasPendingSavePosition = true;
+        
+        // Create/show a temporary marker at the pending position.
+        if (pendingSaveMarker == null && showAimMarker)
+        {
+            pendingSaveMarker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            pendingSaveMarker.name = "PendingSaveMarker";
+            pendingSaveMarker.transform.localScale = Vector3.one * 0.06f;
+            
+            if (aimMarkerMaterial != null)
+            {
+                Renderer markerRenderer = pendingSaveMarker.GetComponent<Renderer>();
+                if (markerRenderer != null)
+                {
+                    markerRenderer.sharedMaterial = aimMarkerMaterial;
+                }
+            }
+            
+            Collider markerCollider = pendingSaveMarker.GetComponent<Collider>();
+            if (markerCollider != null)
+            {
+                markerCollider.enabled = false;
+            }
+        }
+        
+        if (pendingSaveMarker != null)
+        {
+            pendingSaveMarker.transform.position = pendingSavePosition;
+            pendingSaveMarker.SetActive(true);
+        }
+        
+        ShowNameSelectionMenu();
+    }
+
+    // Placement-first, naming-second UX: save using the stored pending position, not the current controller position.
+    public void SavePendingPlacementWithName(string name)
+    {
+        if (savedItemManager == null)
+        {
+            Debug.Log("No SavedItemManager found in the scene.");
+            return;
+        }
+        
+        if (!hasPendingSavePosition)
+        {
+            Debug.LogWarning("SavePendingPlacementWithName called but no pending placement exists. Falling back to current position.");
+            SaveItemWithName(name);
+            return;
+        }
+        
+        string resolvedName = string.IsNullOrWhiteSpace(name) ? "Unnamed Item" : name;
+        SaveItemWithNameAtPosition(resolvedName, pendingSavePosition);
+        
+        // Clear pending state and cleanup marker.
+        hasPendingSavePosition = false;
+        if (pendingSaveMarker != null)
+        {
+            Destroy(pendingSaveMarker);
+            pendingSaveMarker = null;
+        }
+        
+        HideNameSelectionMenu();
+    }
+
+    // Placement-first, naming-second UX: helper that saves an item at a given position.
+    private void SaveItemWithNameAtPosition(string name, Vector3 position)
     {
         if (savedItemManager == null)
         {
@@ -540,7 +478,7 @@ public class SavedItemExample : MonoBehaviour
         SavedItemData savedItem = new SavedItemData();
         savedItem.itemId = System.Guid.NewGuid().ToString();
         savedItem.itemName = resolvedName;
-        savedItem.lastKnownPosition = GetSavePlacementPosition();
+        savedItem.lastKnownPosition = position;
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
 
         bool isDuplicate = false;
@@ -563,8 +501,12 @@ public class SavedItemExample : MonoBehaviour
         ShowTemporarySaveFeedback(feedbackMessage);
 
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
+    }
 
-        HideNameSelectionMenu();
+    // Canvas save name menu prototype: perform a full save using the given name and current placement position.
+    public void SaveItemWithName(string name)
+    {
+        SaveItemWithNameAtPosition(name, GetSavePlacementPosition());
     }
 
     // Canvas save name menu prototype: called by WorldSpaceSaveNamePanelPrototype on enable/disable.

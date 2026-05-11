@@ -19,6 +19,8 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 	private static readonly string[] presetNames = { "Keys", "Wallet", "Remote", "Phone", "Glasses", "Backpack" };
 
 	private readonly List<GameObject> presetButtons = new List<GameObject>();
+	private InputField nameInputField;
+	private string selectedName;
 
 	private static readonly Color normalButtonColor  = new Color(0.18f, 0.22f, 0.3f,  1f);
 	private static readonly Color hoverButtonColor   = new Color(0.28f, 0.35f, 0.52f, 1f);
@@ -127,7 +129,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 	{
 		canvas.renderMode = RenderMode.WorldSpace;
 		RectTransform canvasRect = canvas.GetComponent<RectTransform>();
-		canvasRect.sizeDelta = new Vector2(900f, 620f);
+		canvasRect.sizeDelta = new Vector2(900f, 780f);
 		UpdateCanvasPose();
 	}
 
@@ -167,22 +169,25 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		panelRect.anchorMin = new Vector2(0.5f, 0.5f);
 		panelRect.anchorMax = new Vector2(0.5f, 0.5f);
 		panelRect.pivot    = new Vector2(0.5f, 0.5f);
-		panelRect.sizeDelta = new Vector2(860f, 580f);
+		panelRect.sizeDelta = new Vector2(860f, 740f);
 		panelRect.anchoredPosition = Vector2.zero;
 
 		VerticalLayoutGroup layout = panelObject.AddComponent<VerticalLayoutGroup>();
 		layout.childAlignment = TextAnchor.UpperCenter;
-		layout.spacing = 8f;
-		layout.padding = new RectOffset(24, 24, 20, 20);
+		layout.spacing = 10f;
+		layout.padding = new RectOffset(24, 24, 24, 24);
 		layout.childControlHeight = true;
 		layout.childControlWidth = true;
 		layout.childForceExpandHeight = false;
 		layout.childForceExpandWidth = true;
 
 		CreateHeader(panelRect, "Save Item");
-		CreateSubtitle(panelRect, "Choose a name");
+		CreateSubtitle(panelRect, "Choose or edit a name");
 		CreatePresetButtons(panelRect);
-		CreateBackButton(panelRect);
+		CreateVerticalSpacer(panelRect, 8f);
+		CreateInputFieldRow(panelRect);
+		CreateVerticalSpacer(panelRect, 12f);
+		CreateActionRow(panelRect);
 	}
 
 	private void CreateHeader(Transform parent, string text)
@@ -225,33 +230,124 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 			string capturedName = presetNames[i];
 			GameObject buttonObject = CreateButton(parent, capturedName, () =>
 			{
-				// Canvas save name menu prototype: save the item with the clicked preset name.
-				if (savedItemExample != null)
+				selectedName = capturedName;
+				if (nameInputField != null)
 				{
-					savedItemExample.SaveItemWithName(capturedName);
+					nameInputField.text = capturedName;
 				}
-			});
+			}, 50f);
 			presetButtons.Add(buttonObject);
 		}
 	}
 
-	private void CreateBackButton(Transform parent)
+	private void CreateVerticalSpacer(Transform parent, float height)
 	{
-		// Canvas save name menu prototype: Back button cancels save naming without saving.
-		GameObject backRowObject = CreateUiObject("BackRow", parent);
-		LayoutElement backLayout = backRowObject.AddComponent<LayoutElement>();
-		backLayout.preferredHeight = 72f;
-		backLayout.minHeight = 72f;
+		GameObject spacerObject = CreateUiObject("Spacer", parent);
+		LayoutElement spacerLayout = spacerObject.AddComponent<LayoutElement>();
+		spacerLayout.minHeight = height;
+		spacerLayout.preferredHeight = height;
+	}
 
-		HorizontalLayoutGroup backRowGroup = backRowObject.AddComponent<HorizontalLayoutGroup>();
-		backRowGroup.childAlignment = TextAnchor.MiddleCenter;
-		backRowGroup.childControlHeight = true;
-		backRowGroup.childControlWidth = true;
-		backRowGroup.childForceExpandHeight = true;
-		backRowGroup.childForceExpandWidth = true;
-		backRowGroup.padding = new RectOffset(120, 120, 0, 0);
+	private void CreateInputFieldRow(Transform parent)
+	{
+		GameObject inputRowObject = CreateUiObject("InputRow", parent);
+		LayoutElement inputRowLayout = inputRowObject.AddComponent<LayoutElement>();
+		inputRowLayout.preferredHeight = 72f;
+		inputRowLayout.minHeight = 72f;
 
-		CreateButton(backRowObject.transform, "Back", () =>
+		HorizontalLayoutGroup inputRowGroup = inputRowObject.AddComponent<HorizontalLayoutGroup>();
+		inputRowGroup.childAlignment = TextAnchor.MiddleCenter;
+		inputRowGroup.childControlHeight = true;
+		inputRowGroup.childControlWidth = true;
+		inputRowGroup.childForceExpandHeight = true;
+		inputRowGroup.childForceExpandWidth = true;
+		inputRowGroup.padding = new RectOffset(40, 40, 0, 0);
+
+		GameObject inputObject = CreateUiObject("NameInputField", inputRowObject.transform);
+		Image inputBackground = inputObject.AddComponent<Image>();
+		inputBackground.color = new Color(0.12f, 0.12f, 0.12f, 0.95f);
+
+		LayoutElement inputLayout = inputObject.AddComponent<LayoutElement>();
+		inputLayout.preferredHeight = 60f;
+
+		nameInputField = inputObject.AddComponent<InputField>();
+		nameInputField.targetGraphic = inputBackground;
+		nameInputField.lineType = InputField.LineType.SingleLine;
+
+		GameObject placeholderObject = CreateUiObject("Placeholder", inputObject.transform);
+		RectTransform placeholderRect = placeholderObject.GetComponent<RectTransform>();
+		placeholderRect.anchorMin = Vector2.zero;
+		placeholderRect.anchorMax = Vector2.one;
+		placeholderRect.offsetMin = new Vector2(18f, 8f);
+		placeholderRect.offsetMax = new Vector2(-18f, -8f);
+
+		Text placeholderText = placeholderObject.AddComponent<Text>();
+		placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+		placeholderText.text = "Enter item name";
+		placeholderText.alignment = TextAnchor.MiddleLeft;
+		placeholderText.color = new Color(0.62f, 0.62f, 0.62f, 1f);
+		placeholderText.fontSize = 24;
+		placeholderText.horizontalOverflow = HorizontalWrapMode.Overflow;
+		placeholderText.verticalOverflow = VerticalWrapMode.Overflow;
+
+		GameObject textObject = CreateUiObject("Text", inputObject.transform);
+		RectTransform textRect = textObject.GetComponent<RectTransform>();
+		textRect.anchorMin = Vector2.zero;
+		textRect.anchorMax = Vector2.one;
+		textRect.offsetMin = new Vector2(18f, 8f);
+		textRect.offsetMax = new Vector2(-18f, -8f);
+
+		Text inputText = textObject.AddComponent<Text>();
+		inputText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+		inputText.text = string.Empty;
+		inputText.alignment = TextAnchor.MiddleLeft;
+		inputText.color = Color.white;
+		inputText.fontSize = 24;
+		inputText.horizontalOverflow = HorizontalWrapMode.Overflow;
+		inputText.verticalOverflow = VerticalWrapMode.Overflow;
+
+		nameInputField.textComponent = inputText;
+		nameInputField.placeholder = placeholderText;
+	}
+
+	private void CreateActionRow(Transform parent)
+	{
+		GameObject actionRowObject = CreateUiObject("ActionRow", parent);
+		LayoutElement actionLayout = actionRowObject.AddComponent<LayoutElement>();
+		actionLayout.preferredHeight = 72f;
+		actionLayout.minHeight = 72f;
+
+		HorizontalLayoutGroup actionRowGroup = actionRowObject.AddComponent<HorizontalLayoutGroup>();
+		actionRowGroup.childAlignment = TextAnchor.MiddleCenter;
+		actionRowGroup.childControlHeight = true;
+		actionRowGroup.childControlWidth = true;
+		actionRowGroup.childForceExpandHeight = true;
+		actionRowGroup.childForceExpandWidth = true;
+		actionRowGroup.spacing = 16f;
+		actionRowGroup.padding = new RectOffset(120, 120, 0, 0);
+
+		CreateButton(actionRowObject.transform, "Save", () =>
+		{
+			if (savedItemExample == null)
+			{
+				return;
+			}
+
+			string finalName = nameInputField != null ? nameInputField.text : string.Empty;
+			if (string.IsNullOrWhiteSpace(finalName))
+			{
+				finalName = selectedName;
+			}
+
+			if (string.IsNullOrWhiteSpace(finalName))
+			{
+				finalName = "Unnamed Item";
+			}
+
+			savedItemExample.SavePendingPlacementWithName(finalName);
+		});
+
+		CreateButton(actionRowObject.transform, "Back/Cancel", () =>
 		{
 			// Canvas save name menu prototype: cancel without saving; hide aim marker and return to Neutral.
 			if (savedItemExample != null)
@@ -261,7 +357,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		});
 	}
 
-	private GameObject CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction action)
+	private GameObject CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction action, float buttonHeight = 60f)
 	{
 		GameObject buttonObject = CreateUiObject("Button_" + label.Replace(" ", string.Empty), parent);
 		Image buttonImage = buttonObject.AddComponent<Image>();
@@ -277,8 +373,8 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		button.onClick.AddListener(action);
 
 		LayoutElement buttonLayout = buttonObject.AddComponent<LayoutElement>();
-		buttonLayout.minHeight = 60f;
-		buttonLayout.preferredHeight = 60f;
+		buttonLayout.minHeight = buttonHeight;
+		buttonLayout.preferredHeight = buttonHeight;
 
 		GameObject labelObject = CreateUiObject("Label", buttonObject.transform);
 		RectTransform labelRect = labelObject.GetComponent<RectTransform>();
