@@ -129,7 +129,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 	{
 		canvas.renderMode = RenderMode.WorldSpace;
 		RectTransform canvasRect = canvas.GetComponent<RectTransform>();
-		canvasRect.sizeDelta = new Vector2(900f, 780f);
+		canvasRect.sizeDelta = new Vector2(900f, 1000f);
 		UpdateCanvasPose();
 	}
 
@@ -169,7 +169,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		panelRect.anchorMin = new Vector2(0.5f, 0.5f);
 		panelRect.anchorMax = new Vector2(0.5f, 0.5f);
 		panelRect.pivot    = new Vector2(0.5f, 0.5f);
-		panelRect.sizeDelta = new Vector2(860f, 740f);
+		panelRect.sizeDelta = new Vector2(860f, 960f);
 		panelRect.anchoredPosition = Vector2.zero;
 
 		VerticalLayoutGroup layout = panelObject.AddComponent<VerticalLayoutGroup>();
@@ -186,7 +186,9 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		CreatePresetButtons(panelRect);
 		CreateVerticalSpacer(panelRect, 8f);
 		CreateInputFieldRow(panelRect);
-		CreateVerticalSpacer(panelRect, 12f);
+		CreateVerticalSpacer(panelRect, 6f);
+		CreateKeyboard(panelRect);
+		CreateVerticalSpacer(panelRect, 8f);
 		CreateActionRow(panelRect);
 	}
 
@@ -308,6 +310,151 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 
 		nameInputField.textComponent = inputText;
 		nameInputField.placeholder = placeholderText;
+	}
+
+	private void CreateKeyboard(Transform parent)
+	{
+		// XR keyboard: on-panel text input buttons for headset typing.
+		string[] row1 = { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" };
+		string[] row2 = { "A", "S", "D", "F", "G", "H", "J", "K", "L" };
+		string[] row3 = { "Z", "X", "C", "V", "B", "N", "M" };
+
+		// Create keyboard container with vertical layout.
+		GameObject keyboardObject = CreateUiObject("Keyboard", parent);
+		LayoutElement keyboardLayout = keyboardObject.AddComponent<LayoutElement>();
+		keyboardLayout.preferredHeight = 150f;
+		keyboardLayout.minHeight = 150f;
+
+		VerticalLayoutGroup keyboardGroup = keyboardObject.AddComponent<VerticalLayoutGroup>();
+		keyboardGroup.childAlignment = TextAnchor.UpperCenter;
+		keyboardGroup.spacing = 4f;
+		keyboardGroup.padding = new RectOffset(8, 8, 4, 4);
+		keyboardGroup.childControlHeight = true;
+		keyboardGroup.childControlWidth = true;
+		keyboardGroup.childForceExpandHeight = false;
+		keyboardGroup.childForceExpandWidth = true;
+
+		// Row 1: Q-P
+		CreateKeyboardRow(keyboardObject.transform, row1, 35f);
+
+		// Row 2: A-L
+		CreateKeyboardRow(keyboardObject.transform, row2, 35f);
+
+		// Row 3: Z-M
+		CreateKeyboardRow(keyboardObject.transform, row3, 35f);
+
+		// Row 4: Space, Backspace, Clear, Done
+		GameObject controlRowObject = CreateUiObject("ControlRow", keyboardObject.transform);
+		LayoutElement controlLayout = controlRowObject.AddComponent<LayoutElement>();
+		controlLayout.preferredHeight = 40f;
+		controlLayout.minHeight = 40f;
+
+		HorizontalLayoutGroup controlRowGroup = controlRowObject.AddComponent<HorizontalLayoutGroup>();
+		controlRowGroup.childAlignment = TextAnchor.MiddleCenter;
+		controlRowGroup.childControlHeight = true;
+		controlRowGroup.childControlWidth = true;
+		controlRowGroup.childForceExpandHeight = true;
+		controlRowGroup.childForceExpandWidth = true;
+		controlRowGroup.spacing = 4f;
+		controlRowGroup.padding = new RectOffset(4, 4, 0, 0);
+
+		// Space button (wider)
+		CreateKeyboardButton(controlRowObject.transform, "Space", () =>
+		{
+			if (nameInputField != null)
+			{
+				nameInputField.text += " ";
+			}
+		}, 80f);
+
+		// Backspace button
+		CreateKeyboardButton(controlRowObject.transform, "Back", () =>
+		{
+			if (nameInputField != null && nameInputField.text.Length > 0)
+			{
+				nameInputField.text = nameInputField.text.Substring(0, nameInputField.text.Length - 1);
+			}
+		}, 50f);
+
+		// Clear button
+		CreateKeyboardButton(controlRowObject.transform, "Clear", () =>
+		{
+			if (nameInputField != null)
+			{
+				nameInputField.text = string.Empty;
+			}
+		}, 50f);
+
+		// Done button (hides keyboard, does not save)
+		CreateKeyboardButton(controlRowObject.transform, "Done", () =>
+		{
+			// Done just dismisses the keyboard; Save button is required to commit.
+		}, 50f);
+	}
+
+	private void CreateKeyboardRow(Transform parent, string[] keys, float buttonHeight)
+	{
+		GameObject rowObject = CreateUiObject("KeyboardRow", parent);
+		LayoutElement rowLayout = rowObject.AddComponent<LayoutElement>();
+		rowLayout.preferredHeight = buttonHeight;
+		rowLayout.minHeight = buttonHeight;
+
+		HorizontalLayoutGroup rowGroup = rowObject.AddComponent<HorizontalLayoutGroup>();
+		rowGroup.childAlignment = TextAnchor.MiddleCenter;
+		rowGroup.childControlHeight = true;
+		rowGroup.childControlWidth = true;
+		rowGroup.childForceExpandHeight = true;
+		rowGroup.childForceExpandWidth = true;
+		rowGroup.spacing = 3f;
+		rowGroup.padding = new RectOffset(2, 2, 0, 0);
+
+		for (int i = 0; i < keys.Length; i++)
+		{
+			string key = keys[i];
+			CreateKeyboardButton(rowObject.transform, key, () =>
+			{
+				if (nameInputField != null)
+				{
+					nameInputField.text += key;
+				}
+			});
+		}
+	}
+
+	private void CreateKeyboardButton(Transform parent, string label, UnityEngine.Events.UnityAction action, float preferredWidth = 35f)
+	{
+		GameObject buttonObject = CreateUiObject("KeyButton_" + label, parent);
+		Image buttonImage = buttonObject.AddComponent<Image>();
+		buttonImage.color = new Color(0.25f, 0.28f, 0.38f, 1f);
+
+		Button button = buttonObject.AddComponent<Button>();
+		ColorBlock colors = button.colors;
+		colors.normalColor = new Color(0.25f, 0.28f, 0.38f, 1f);
+		colors.highlightedColor = new Color(0.35f, 0.40f, 0.55f, 1f);
+		colors.pressedColor = new Color(0.15f, 0.18f, 0.28f, 1f);
+		colors.selectedColor = new Color(0.35f, 0.40f, 0.55f, 1f);
+		button.colors = colors;
+		button.onClick.AddListener(action);
+
+		LayoutElement buttonLayout = buttonObject.AddComponent<LayoutElement>();
+		buttonLayout.preferredWidth = preferredWidth;
+		buttonLayout.minWidth = preferredWidth;
+
+		GameObject labelObject = CreateUiObject("Label", buttonObject.transform);
+		RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+		labelRect.anchorMin = Vector2.zero;
+		labelRect.anchorMax = Vector2.one;
+		labelRect.offsetMin = Vector2.zero;
+		labelRect.offsetMax = Vector2.zero;
+
+		Text labelText = labelObject.AddComponent<Text>();
+		labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+		labelText.text = label;
+		labelText.alignment = TextAnchor.MiddleCenter;
+		labelText.color = Color.white;
+		labelText.fontSize = label.Length > 3 ? 16 : 20;
+		labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+		labelText.verticalOverflow = VerticalWrapMode.Overflow;
 	}
 
 	private void CreateActionRow(Transform parent)
