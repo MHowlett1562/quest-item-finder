@@ -6,6 +6,7 @@ public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
 	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
+    [SerializeField] private SceneUnderstandingTest sceneUnderstandingTest;
     private bool wasRightTriggerPressed;
     private bool wasRightPrimaryButtonPressed;
     private bool wasRightSecondaryButtonPressed;
@@ -48,6 +49,11 @@ public class SavedItemExample : MonoBehaviour
 		{
 			savedItemFinderExample = FindFirstObjectByType<SavedItemFinderExample>();
 		}
+
+        if (sceneUnderstandingTest == null)
+        {
+            sceneUnderstandingTest = FindFirstObjectByType<SceneUnderstandingTest>();
+        }
 
         if (savedItemManager != null)
         {
@@ -206,6 +212,16 @@ public class SavedItemExample : MonoBehaviour
 
     private Vector3 GetSavePlacementPosition()
     {
+        if (rightControllerTransform != null && sceneUnderstandingTest != null)
+        {
+            Ray controllerRay = new Ray(rightControllerTransform.position, rightControllerTransform.forward);
+            Pose sceneHitPose;
+            if (sceneUnderstandingTest.TryGetSceneHitFromRay(controllerRay, out sceneHitPose))
+            {
+                return sceneHitPose.position;
+            }
+        }
+
         // Save Placement UX MVP refinement: place the save point directly in front of the assigned right controller.
         if (rightControllerTransform != null)
         {
@@ -260,7 +276,19 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
-        // Save Placement UX MVP refinement: preview the same position that will be used for save.
+        // Save Placement UX MVP refinement: preview controller-based scene-understanding hit when available.
+        if (rightControllerTransform != null && sceneUnderstandingTest != null)
+        {
+            Ray controllerRay = new Ray(rightControllerTransform.position, rightControllerTransform.forward);
+            Pose sceneHitPose;
+            if (sceneUnderstandingTest.TryGetSceneHitFromRay(controllerRay, out sceneHitPose))
+            {
+                aimMarker.transform.position = sceneHitPose.position;
+                aimMarker.SetActive(true);
+                return;
+            }
+        }
+
         if (rightControllerTransform != null)
         {
             aimMarker.transform.position = rightControllerTransform.position + (rightControllerTransform.forward * controllerSaveDistance);
