@@ -16,6 +16,7 @@ public class SceneUnderstandingTest : MonoBehaviour
 	private float nextStatusLogTime;
 	private float nextRaycastLogTime;
 	private GameObject debugHitSphere;
+	private bool isDebugHitSphereVisible = true;
 	public bool HasLatestHit { get; private set; }
 	public Vector3 LatestHitPosition { get; private set; }
 	public Quaternion LatestHitRotation { get; private set; }
@@ -182,7 +183,7 @@ public class SceneUnderstandingTest : MonoBehaviour
 				Debug.Log(LogPrefix + " No AR raycast hit.");
 			}
 
-			if (!showDebugHitSphere && debugHitSphere != null)
+			if (debugHitSphere != null)
 			{
 				debugHitSphere.SetActive(false);
 			}
@@ -201,7 +202,7 @@ public class SceneUnderstandingTest : MonoBehaviour
 			Debug.Log(LogPrefix + " AR raycast hit at " + hitPose.position);
 		}
 
-		if (!showDebugHitSphere)
+		if (!showDebugHitSphere || !isDebugHitSphereVisible)
 		{
 			if (debugHitSphere != null)
 			{
@@ -213,6 +214,16 @@ public class SceneUnderstandingTest : MonoBehaviour
 		EnsureDebugHitSphere();
 		debugHitSphere.SetActive(true);
 		debugHitSphere.transform.SetPositionAndRotation(hitPose.position, hitPose.rotation);
+	}
+
+	public void SetDebugHitSphereVisible(bool isVisible)
+	{
+		isDebugHitSphereVisible = isVisible;
+
+		if (!isVisible && debugHitSphere != null)
+		{
+			debugHitSphere.SetActive(false);
+		}
 	}
 
 	public bool TryGetSceneHitFromRay(Ray ray, out Pose hitPose)

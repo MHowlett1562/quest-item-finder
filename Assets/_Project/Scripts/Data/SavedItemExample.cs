@@ -95,8 +95,19 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
+        if (isNameSelectionMenuOpen)
+        {
+            UpdateAimMarker(false);
+            DisableControllerRayVisual();
+
+            wasRightTriggerPressed = rightTriggerPressed;
+            wasRightPrimaryButtonPressed = rightPrimaryButtonPressed;
+            wasRightSecondaryButtonPressed = rightSecondaryButtonPressed;
+            return;
+        }
+
         UpdateAimMarker(rightTriggerPressed);
-        UpdateControllerRayVisual();
+        UpdateControllerRayVisual(rightTriggerPressed);
 
         // Placement-first, naming-second UX: capture placement on trigger release, not press.
         if (!isNameSelectionMenuOpen)
@@ -158,6 +169,15 @@ public class SavedItemExample : MonoBehaviour
         // MVP preset name selection UI: open simple headset menu before save instead of typing a name.
         isNameSelectionMenuOpen = true;
 
+        // Keep only the normal XR UI ray during naming menu interaction.
+        UpdateAimMarker(false);
+        DisableControllerRayVisual();
+
+        if (sceneUnderstandingTest != null)
+        {
+            sceneUnderstandingTest.SetDebugHitSphereVisible(false);
+        }
+
 		if (savedItemFinderExample != null)
 		{
 			// Enum app mode state cleanup: save naming is now the active primary mode.
@@ -171,6 +191,12 @@ public class SavedItemExample : MonoBehaviour
     private void HideNameSelectionMenu()
     {
         isNameSelectionMenuOpen = false;
+        bool shouldRestoreSavePlacementVisuals = savedItemFinderExample != null && savedItemFinderExample.IsSaveMode();
+
+        if (sceneUnderstandingTest != null)
+        {
+            sceneUnderstandingTest.SetDebugHitSphereVisible(true);
+        }
 
 		if (savedItemFinderExample != null && savedItemFinderExample.IsSaveMode())
 		{
@@ -187,6 +213,11 @@ public class SavedItemExample : MonoBehaviour
         }
 
         DisableControllerRayVisual();
+
+        if (shouldRestoreSavePlacementVisuals)
+        {
+            UpdateAimMarker(false);
+        }
     }
 
     public void CancelNameSelectionMenu()
@@ -245,6 +276,15 @@ public class SavedItemExample : MonoBehaviour
             return;
         }
 
+		if (isNameSelectionMenuOpen)
+		{
+			if (aimMarker != null)
+			{
+				aimMarker.SetActive(false);
+			}
+			return;
+		}
+
         if (aimMarker == null)
         {
             // Save Placement UX improvement: tiny sphere preview for controller hit point.
@@ -269,7 +309,7 @@ public class SavedItemExample : MonoBehaviour
             }
         }
 
-        bool shouldShowAimMarker = isNameSelectionMenuOpen || rightTriggerPressed;
+        bool shouldShowAimMarker = rightTriggerPressed;
         if (!shouldShowAimMarker)
         {
             aimMarker.SetActive(false);
@@ -343,9 +383,9 @@ public class SavedItemExample : MonoBehaviour
         controllerRayLine.enabled = false;
     }
 
-    private void UpdateControllerRayVisual()
+    private void UpdateControllerRayVisual(bool rightTriggerPressed)
     {
-        bool shouldShowRay = isNameSelectionMenuOpen && showAimMarker && rightControllerTransform != null;
+        bool shouldShowRay = !isNameSelectionMenuOpen && showAimMarker && rightControllerTransform != null && rightTriggerPressed;
         if (!shouldShowRay)
         {
             DisableControllerRayVisual();
@@ -357,6 +397,20 @@ public class SavedItemExample : MonoBehaviour
         Vector3 rayStart = rightControllerTransform.position;
         Vector3 rayDirection = rightControllerTransform.forward;
         Vector3 rayEnd = rayStart + (rayDirection * controllerSaveDistance);
+
+        if (sceneUnderstandingTest != null)
+        {
+            Ray controllerRay = new Ray(rayStart, rayDirection);
+            Pose sceneHitPose;
+            if (sceneUnderstandingTest.TryGetSceneHitFromRay(controllerRay, out sceneHitPose))
+            {
+                rayEnd = sceneHitPose.position;
+                controllerRayLine.enabled = true;
+                controllerRayLine.SetPosition(0, rayStart);
+                controllerRayLine.SetPosition(1, rayEnd);
+                return;
+            }
+        }
 
         // Controller ray visual polish: use a simple Physics raycast for the visible end point only.
         RaycastHit hit;
