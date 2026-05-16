@@ -1,7 +1,10 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine.XR;
+using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
 
 public class SavedItemFinderExample : MonoBehaviour
 {
@@ -22,6 +25,7 @@ public class SavedItemFinderExample : MonoBehaviour
 	private TextMesh settingsMenuText;
 	private GameObject directionalIndicator;
 	[SerializeField] private SavedItemExample savedItemExample;
+	[SerializeField] private ARAnchorManager arAnchorManager;
 	[SerializeField] private AudioClip proximityBeepClip;
 	// Clickable settings panel MVP: optional right-controller ray origin for in-headset button clicks.
 	[SerializeField] private Transform rightControllerTransform;
@@ -118,6 +122,11 @@ public class SavedItemFinderExample : MonoBehaviour
 		if (savedItemExample == null)
 		{
 			savedItemExample = FindFirstObjectByType<SavedItemExample>();
+		}
+
+		if (arAnchorManager == null)
+		{
+			arAnchorManager = FindFirstObjectByType<ARAnchorManager>();
 		}
 
 		if (proximityAudioSource == null)
@@ -1407,7 +1416,8 @@ public class SavedItemFinderExample : MonoBehaviour
 		for (int i = 0; i < items.Count; i++)
 		{
 			SavedItemData item = items[i];
-			SpawnMarkerForItem(item);
+			GameObject marker = SpawnMarkerForItem(item);
+			TryResolvePersistentAnchorPosition(item, marker);
 		}
 
 		Debug.Log("Spawned " + spawnedMarkers.Count + " marker(s).");
@@ -1527,9 +1537,102 @@ public class SavedItemFinderExample : MonoBehaviour
 
 		if (showTargetMarker)
 		{
-			SpawnMarkerForItem(item);
+			GameObject marker = SpawnMarkerForItem(item);
+			TryResolvePersistentAnchorPosition(item, marker);
 			Debug.Log("Spawned marker for item: " + item.itemName);
 		}
+		else
+		{
+			TryResolvePersistentAnchorPosition(item, null);
+		}
+	}
+
+	private async void TryResolvePersistentAnchorPosition(SavedItemData item, GameObject markerToUpdate)
+	{
+		if (item == null)
+		{
+			return;
+		}
+
+		if (string.IsNullOrWhiteSpace(item.persistentAnchorId))
+		{
+			Debug.Log("[SavedItemFinderExample] No persistent anchor ID for item '" + item.itemName + "'. Using fallback position.");
+			return;
+		}
+
+		if (arAnchorManager == null)
+		{
+			arAnchorManager = FindFirstObjectByType<ARAnchorManager>();
+		}
+
+		if (arAnchorManager == null)
+		{
+			Debug.LogWarning("[SavedItemFinderExample] Anchor restore failed for item '" + item.itemName + "'. ARAnchorManager not found. Using fallback position.");
+			return;
+		}
+
+		if (arAnchorManager.descriptor == null || !arAnchorManager.descriptor.supportsLoadAnchor)
+		{
+			Debug.LogWarning("[SavedItemFinderExample] Anchor restore failed for item '" + item.itemName + "'. Load not supported. Using fallback position.");
+			return;
+		}
+
+		if (!TryParseSerializableGuid(item.persistentAnchorId, out SerializableGuid persistentGuid))
+		{
+			Debug.LogWarning("[SavedItemFinderExample] Anchor restore failed for item '" + item.itemName + "'. Invalid ID format: " + item.persistentAnchorId);
+			return;
+		}
+
+		Debug.Log("[SavedItemFinderExample] Anchor restore attempt started for item '" + item.itemName + "' with ID " + item.persistentAnchorId);
+		var loadResult = await arAnchorManager.TryLoadAnchorAsync(persistentGuid);
+		if (!loadResult.status.IsSuccess())
+		{
+			Debug.LogWarning("[SavedItemFinderExample] Anchor restore failed for item '" + item.itemName + "'. Status: " + loadResult.status + ". Using fallback position.");
+			return;
+		}
+
+		ARAnchor restoredAnchor = loadResult.value;
+		if (restoredAnchor == null)
+		{
+			Debug.LogWarning("[SavedItemFinderExample] Anchor restore failed for item '" + item.itemName + "'. Loaded anchor was null. Using fallback position.");
+			return;
+		}
+
+		item.lastKnownPosition = restoredAnchor.transform.position;
+		Debug.Log("[SavedItemFinderExample] Anchor restore succeeded for item '" + item.itemName + "'. Restored position=" + item.lastKnownPosition);
+
+		if (markerToUpdate != null)
+		{
+			markerToUpdate.transform.position = item.lastKnownPosition;
+		}
+	}
+
+	private bool TryParseSerializableGuid(string guidText, out SerializableGuid guid)
+	{
+		guid = default;
+		if (string.IsNullOrWhiteSpace(guidText))
+		{
+			return false;
+		}
+
+		string[] tokens = guidText.Split('-');
+		if (tokens.Length != 2)
+		{
+			return false;
+		}
+
+		if (!ulong.TryParse(tokens[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong low))
+		{
+			return false;
+		}
+
+		if (!ulong.TryParse(tokens[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong high))
+		{
+			return false;
+		}
+
+		guid = new SerializableGuid(low, high);
+		return true;
 	}
 
 	private void EnsureSpawnedMarkersParent()
@@ -1875,7 +1978,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		return material;
 	}
 
-	private void SpawnMarkerForItem(SavedItemData item)
+	private GameObject SpawnMarkerForItem(SavedItemData item)
 	{
 		// Waypoint marker visual polish: clean 3D map pin with tapered drop.
 		GameObject waypointMarker = new GameObject(item.itemName + " Waypoint Marker");
@@ -1937,6 +2040,7 @@ public class SavedItemFinderExample : MonoBehaviour
 		}
 
 		spawnedMarkers.Add(waypointMarker);
+		return waypointMarker;
 	}
 
 	private void UpdateWaypointMarkerScale()

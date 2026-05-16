@@ -1,12 +1,14 @@
 using UnityEngine;
 using UnityEngine.XR;
 using System.Collections;
+using UnityEngine.XR.ARFoundation;
 
 public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
 	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
     [SerializeField] private SceneUnderstandingTest sceneUnderstandingTest;
+    [SerializeField] private ARAnchorManager arAnchorManager;
     private bool wasRightTriggerPressed;
     private bool wasRightPrimaryButtonPressed;
     private bool wasRightSecondaryButtonPressed;
@@ -53,6 +55,11 @@ public class SavedItemExample : MonoBehaviour
         if (sceneUnderstandingTest == null)
         {
             sceneUnderstandingTest = FindFirstObjectByType<SceneUnderstandingTest>();
+        }
+
+        if (arAnchorManager == null)
+        {
+            arAnchorManager = FindFirstObjectByType<ARAnchorManager>();
         }
 
         if (savedItemManager != null)
@@ -547,7 +554,7 @@ public class SavedItemExample : MonoBehaviour
     }
 
     // Placement-first, naming-second UX: helper that saves an item at a given position.
-    private void SaveItemWithNameAtPosition(string name, Vector3 position)
+    private async void SaveItemWithNameAtPosition(string name, Vector3 position)
     {
         if (savedItemManager == null)
         {
@@ -562,6 +569,51 @@ public class SavedItemExample : MonoBehaviour
         savedItem.itemName = resolvedName;
         savedItem.lastKnownPosition = position;
         savedItem.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+        savedItem.persistentAnchorId = null;
+
+        if (arAnchorManager == null)
+        {
+            arAnchorManager = FindFirstObjectByType<ARAnchorManager>();
+        }
+
+        if (arAnchorManager == null)
+        {
+            Debug.LogWarning("[SavedItemExample] ARAnchorManager not found. Saving item with fallback position only.");
+        }
+        else if (arAnchorManager.descriptor == null)
+        {
+            Debug.LogWarning("[SavedItemExample] ARAnchorManager descriptor missing. Saving item with fallback position only.");
+        }
+        else
+        {
+            Pose anchorPose = new Pose(position, Quaternion.identity);
+            var addAnchorResult = await arAnchorManager.TryAddAnchorAsync(anchorPose);
+            if (!addAnchorResult.status.IsSuccess())
+            {
+                Debug.LogWarning("[SavedItemExample] Anchor creation failed. Saving item with fallback position. Status: " + addAnchorResult.status);
+            }
+            else if (addAnchorResult.value == null)
+            {
+                Debug.LogWarning("[SavedItemExample] Anchor creation returned null anchor. Saving item with fallback position.");
+            }
+            else if (!arAnchorManager.descriptor.supportsSaveAnchor)
+            {
+                Debug.LogWarning("[SavedItemExample] Anchor persistence not supported. Saving item with fallback position only.");
+            }
+            else
+            {
+                var saveAnchorResult = await arAnchorManager.TrySaveAnchorAsync(addAnchorResult.value);
+                if (!saveAnchorResult.status.IsSuccess())
+                {
+                    Debug.LogWarning("[SavedItemExample] Anchor persistence failed. Saving item with fallback position. Status: " + saveAnchorResult.status);
+                }
+                else
+                {
+                    savedItem.persistentAnchorId = saveAnchorResult.value.ToString();
+                    Debug.Log("[SavedItemExample] Anchor persisted for item '" + resolvedName + "'. AnchorId=" + savedItem.persistentAnchorId);
+                }
+            }
+        }
 
         bool isDuplicate = false;
         System.Collections.Generic.List<SavedItemData> existingItems = savedItemManager.GetAllItems();

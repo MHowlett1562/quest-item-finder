@@ -200,6 +200,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   savedItemExample: {fileID: 0}
+  arAnchorManager: {fileID: 0}
   proximityBeepClip: {fileID: 8300000, guid: ad5aad6a4259136469a1f6a9eedcc25e, type: 3}
   rightControllerTransform: {fileID: 1217560441}
   testItemName: Wallet
@@ -548,6 +549,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   savedItemFinderExample: {fileID: 0}
   sceneUnderstandingTest: {fileID: 0}
+  arAnchorManager: {fileID: 0}
   testItemName: Keys
   presetItemNames:
   - Keys

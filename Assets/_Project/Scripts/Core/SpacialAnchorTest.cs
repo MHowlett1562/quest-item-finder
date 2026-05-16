@@ -1,3 +1,4 @@
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.XR;
 using UnityEngine.XR.ARFoundation;
@@ -17,6 +18,7 @@ public class SpacialAnchorTest : MonoBehaviour
 	private GameObject activeDebugSphere;
 
 	private const string LogPrefix = "[SpacialAnchorTest]";
+	private const string TestAnchorIdPrefsKey = "QuestItemFinder_TestAnchorId";
 
 	private void Awake()
 	{
@@ -34,6 +36,7 @@ public class SpacialAnchorTest : MonoBehaviour
 	private void Start()
 	{
 		Debug.Log(LogPrefix + " Start fired.");
+		TryRestoreSavedTestAnchor();
 	}
 
 	private void Update()
@@ -118,10 +121,139 @@ public class SpacialAnchorTest : MonoBehaviour
 			+ " TrackableId: " + anchor.trackableId
 			+ " World Position: " + anchor.transform.position);
 
+		TryPersistAnchor(anchor);
+
 		if (showAnchorDebugSphere)
 		{
 			CreateDebugSphere(anchor);
 		}
+	}
+
+	private async void TryPersistAnchor(ARAnchor anchor)
+	{
+		if (anchor == null)
+		{
+			Debug.LogWarning(LogPrefix + " Persist failed. Anchor reference is null.");
+			return;
+		}
+
+		if (arAnchorManager == null)
+		{
+			Debug.LogWarning(LogPrefix + " Persist failed. ARAnchorManager reference is missing.");
+			return;
+		}
+
+		if (arAnchorManager.descriptor == null || !arAnchorManager.descriptor.supportsSaveAnchor)
+		{
+			Debug.LogWarning(LogPrefix + " Persist failed. This provider does not support anchor save.");
+			return;
+		}
+
+		Debug.Log(LogPrefix + " Persist attempt started.");
+		var saveResult = await arAnchorManager.TrySaveAnchorAsync(anchor);
+		if (!saveResult.status.IsSuccess())
+		{
+			Debug.LogWarning(
+				LogPrefix
+				+ " Persist failed."
+				+ " Status: " + saveResult.status);
+			return;
+		}
+
+		SerializableGuid persistentId = saveResult.value;
+		string persistentIdString = persistentId.ToString();
+
+		PlayerPrefs.SetString(TestAnchorIdPrefsKey, persistentIdString);
+		PlayerPrefs.Save();
+
+		Debug.Log(LogPrefix + " Persist succeeded.");
+		Debug.Log(LogPrefix + " Saved anchor ID: " + persistentIdString);
+	}
+
+	private async void TryRestoreSavedTestAnchor()
+	{
+		if (arAnchorManager == null)
+		{
+			Debug.LogWarning(LogPrefix + " Restore failed. ARAnchorManager reference is missing.");
+			return;
+		}
+
+		if (!PlayerPrefs.HasKey(TestAnchorIdPrefsKey))
+		{
+			Debug.Log(LogPrefix + " Restore skipped. No saved test anchor ID found.");
+			return;
+		}
+
+		if (arAnchorManager.descriptor == null || !arAnchorManager.descriptor.supportsLoadAnchor)
+		{
+			Debug.LogWarning(LogPrefix + " Restore failed. This provider does not support anchor load.");
+			return;
+		}
+
+		string savedAnchorId = PlayerPrefs.GetString(TestAnchorIdPrefsKey);
+		if (!TryParseSerializableGuid(savedAnchorId, out SerializableGuid persistentId))
+		{
+			Debug.LogWarning(LogPrefix + " Restore failed. Saved anchor ID format is invalid: " + savedAnchorId);
+			return;
+		}
+
+		Debug.Log(LogPrefix + " Restore attempt started. Saved ID: " + savedAnchorId);
+		var loadResult = await arAnchorManager.TryLoadAnchorAsync(persistentId);
+		if (!loadResult.status.IsSuccess())
+		{
+			Debug.LogWarning(
+				LogPrefix
+				+ " Restore failed."
+				+ " Status: " + loadResult.status
+				+ " Saved ID: " + savedAnchorId);
+			return;
+		}
+
+		ARAnchor restoredAnchor = loadResult.value;
+		if (restoredAnchor == null)
+		{
+			Debug.LogWarning(LogPrefix + " Restore failed. Load reported success but returned null anchor.");
+			return;
+		}
+
+		Debug.Log(
+			LogPrefix
+			+ " Restore succeeded."
+			+ " TrackableId: " + restoredAnchor.trackableId
+			+ " World Position: " + restoredAnchor.transform.position);
+
+		if (showAnchorDebugSphere)
+		{
+			CreateDebugSphere(restoredAnchor);
+		}
+	}
+
+	private bool TryParseSerializableGuid(string guidText, out SerializableGuid guid)
+	{
+		guid = default;
+		if (string.IsNullOrWhiteSpace(guidText))
+		{
+			return false;
+		}
+
+		string[] tokens = guidText.Split('-');
+		if (tokens.Length != 2)
+		{
+			return false;
+		}
+
+		if (!ulong.TryParse(tokens[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong low))
+		{
+			return false;
+		}
+
+		if (!ulong.TryParse(tokens[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong high))
+		{
+			return false;
+		}
+
+		guid = new SerializableGuid(low, high);
+		return true;
 	}
 
 	private void CreateDebugSphere(ARAnchor anchor)
