@@ -9,6 +9,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 {
 	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
 	[SerializeField] private SavedItemExample savedItemExample;
+	[SerializeField] private VoiceNamingController voiceNamingController;
 	[SerializeField] private Canvas worldSpaceCanvas;
 	[SerializeField] private bool autoCreateCanvasIfMissing = true;
 	[SerializeField] private Vector3 canvasLocalPosition = new Vector3(0f, 0.04f, 1.15f);
@@ -36,6 +37,16 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		if (savedItemExample == null)
 		{
 			savedItemExample = FindFirstObjectByType<SavedItemExample>();
+		}
+
+		if (voiceNamingController == null)
+		{
+			voiceNamingController = FindFirstObjectByType<VoiceNamingController>();
+		}
+
+		if (voiceNamingController == null)
+		{
+			voiceNamingController = gameObject.AddComponent<VoiceNamingController>();
 		}
 
 		EnsureEventSystemWithXrUiInputModule();
@@ -472,6 +483,14 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		actionRowGroup.childForceExpandWidth = true;
 		actionRowGroup.spacing = 16f;
 		actionRowGroup.padding = new RectOffset(120, 120, 0, 0);
+
+		CreateButton(actionRowObject.transform, "Voice", () =>
+		{
+			if (voiceNamingController != null)
+			{
+				voiceNamingController.RequestTranscriptIntoField(nameInputField);
+			}
+		});
 
 		CreateButton(actionRowObject.transform, "Save", () =>
 		{
