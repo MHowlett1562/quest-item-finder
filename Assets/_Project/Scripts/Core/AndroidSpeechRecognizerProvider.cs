@@ -11,13 +11,15 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 	// Proxy class that bridges android.speech.RecognitionListener to C# callbacks.
 	private sealed class RecognitionListenerProxy : AndroidJavaProxy
 	{
-		private readonly Action<string> onResult;
+		private readonly Action<string> onFinalResult;
+		private readonly Action<string> onPartialResult;
 		private readonly Action<string> _onError;
 
-		public RecognitionListenerProxy(Action<string> onResult, Action<string> onError)
+		public RecognitionListenerProxy(Action<string> onFinalResult, Action<string> onPartialResult, Action<string> onError)
 			: base("android.speech.RecognitionListener")
 		{
-			this.onResult = onResult;
+			this.onFinalResult = onFinalResult;
+			this.onPartialResult = onPartialResult;
 			_onError = onError;
 		}
 
@@ -48,6 +50,7 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 		public void onError(int error)
 		{
 			string description = DescribeError(error);
+			Debug.LogWarning("[VoiceStartup] recognition error: " + description + " (code " + error + ")");
 			Debug.LogWarning(LogPrefix + " RecognitionListener.onError callback. " + description + " (code " + error + ")");
 			_onError?.Invoke(description);
 		}
@@ -75,8 +78,9 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 				}
 
 				string transcript = resultList.Call<string>("get", 0);
+				Debug.Log("[VoiceStartup] final transcript: " + transcript);
 				Debug.Log(LogPrefix + " Speech recognition result received: " + transcript);
-				onResult?.Invoke(transcript);
+				onFinalResult?.Invoke(transcript);
 			}
 			catch (Exception ex)
 			{
@@ -88,6 +92,28 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 		public void onPartialResults(AndroidJavaObject bundle)
 		{
 			Debug.Log(LogPrefix + " RecognitionListener.onPartialResults callback.");
+			try
+			{
+				AndroidJavaObject partialResultList = bundle.Call<AndroidJavaObject>("getStringArrayList", "results_recognition");
+				if (partialResultList == null)
+				{
+					return;
+				}
+
+				int count = partialResultList.Call<int>("size");
+				if (count <= 0)
+				{
+					return;
+				}
+
+				string partialTranscript = partialResultList.Call<string>("get", 0);
+				Debug.Log("[VoiceStartup] partial transcript: " + partialTranscript);
+				onPartialResult?.Invoke(partialTranscript);
+			}
+			catch (Exception ex)
+			{
+				Debug.LogWarning(LogPrefix + " Partial transcript parse error: " + ex.Message);
+			}
 		}
 
 		public void onEvent(int eventType, AndroidJavaObject bundle) { }
@@ -111,34 +137,31 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 	}
 
 	private AndroidJavaObject speechRecognizer;
+	private RecognitionListenerProxy warmupListener;
 #endif
 
-	public void StartListening(Action<string> onTranscriptReceived, Action<string> onError = null)
-	{
 #if UNITY_ANDROID
-		Debug.Log(LogPrefix + " StartListening called.");
+	public bool InitializeRecognizer()
+	{
 		try
 		{
 			using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
 			using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
 			{
-				// Check that speech recognition service is available on this device.
 				bool isAvailable;
 				using (AndroidJavaClass recognizerClass = new AndroidJavaClass("android.speech.SpeechRecognizer"))
 				{
 					isAvailable = recognizerClass.CallStatic<bool>("isRecognitionAvailable", activity);
 				}
 
+				Debug.Log("[VoiceStartup] SpeechRecognizer.isRecognitionAvailable = " + isAvailable);
 				Debug.Log(LogPrefix + " SpeechRecognizer.isRecognitionAvailable = " + isAvailable);
-
 				if (!isAvailable)
 				{
 					Debug.LogWarning(LogPrefix + " Speech recognition unavailable on this device.");
-					onError?.Invoke("Speech recognition unavailable on this device.");
-					return;
+					return false;
 				}
 
-				// Destroy any previous recognizer before creating a new one.
 				if (speechRecognizer != null)
 				{
 					speechRecognizer.Call("destroy");
@@ -154,11 +177,55 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 				if (speechRecognizer == null)
 				{
 					Debug.LogWarning(LogPrefix + " Failed to create Android SpeechRecognizer.");
-					onError?.Invoke("Failed to create SpeechRecognizer.");
-					return;
+					return false;
 				}
 
-				var listener = new RecognitionListenerProxy(onTranscriptReceived, onError);
+				warmupListener = new RecognitionListenerProxy(null, null, null);
+				speechRecognizer.Call("setRecognitionListener", warmupListener);
+				Debug.Log("[VoiceStartup] recognizer created successfully");
+				Debug.Log(LogPrefix + " SpeechRecognizer created successfully.");
+				Debug.Log(LogPrefix + " Using in-process SpeechRecognizer; no external speech UI/activity will be launched.");
+				return true;
+			}
+		}
+		catch (Exception ex)
+		{
+			Debug.LogWarning(LogPrefix + " Speech recognizer initialization error: " + ex.Message);
+			return false;
+		}
+	}
+#endif
+
+	public void StartListening(Action<string> onTranscriptReceived, Action<string> onError = null)
+	{
+#if UNITY_ANDROID
+		StartListeningWithProgress(
+			onPartialTranscriptReceived: null,
+			onFinalTranscriptReceived: onTranscriptReceived,
+			onError: onError);
+#else
+		Debug.LogWarning(LogPrefix + " AndroidSpeechRecognizerProvider is not supported in the Unity Editor. Use MockVoiceTranscriptionProvider instead.");
+		onError?.Invoke("AndroidSpeechRecognizerProvider not supported outside Android.");
+#endif
+	}
+
+#if UNITY_ANDROID
+	public bool StartListeningWithProgress(Action<string> onPartialTranscriptReceived, Action<string> onFinalTranscriptReceived, Action<string> onError = null)
+	{
+		Debug.Log(LogPrefix + " StartListening called.");
+		Debug.Log("[VoiceStartup] startListening called");
+		try
+		{
+			if (!InitializeRecognizer())
+			{
+				onError?.Invoke("Speech recognition unavailable on this device.");
+				return false;
+			}
+
+			using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+			using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+			{
+				var listener = new RecognitionListenerProxy(onFinalTranscriptReceived, onPartialTranscriptReceived, onError);
 				speechRecognizer.Call("setRecognitionListener", listener);
 
 				// Retrieve RecognizerIntent constants, then build and dispatch the intent.
@@ -174,21 +241,22 @@ public class AndroidSpeechRecognizerProvider : IVoiceTranscriptionProvider
 
 				using (AndroidJavaObject intent = new AndroidJavaObject("android.content.Intent", actionRecognize))
 				{
+					intent.Call<AndroidJavaObject>("putExtra", "android.speech.extra.PARTIAL_RESULTS", true);
 					intent.Call<AndroidJavaObject>("putExtra", extraLanguageModel, languageModelFreeForm);
 					Debug.Log(LogPrefix + " Calling SpeechRecognizer.startListening.");
 					speechRecognizer.Call("startListening", intent);
 					Debug.Log(LogPrefix + " Android speech recognition provider returned (listener attached, awaiting result).");
+					return true;
 				}
 			}
 		}
 		catch (Exception ex)
 		{
+			Debug.LogWarning("[VoiceStartup] recognition error: " + ex.Message);
 			Debug.LogWarning(LogPrefix + " Speech recognition error: " + ex.Message);
 			onError?.Invoke(ex.Message);
+			return false;
 		}
-#else
-		Debug.LogWarning(LogPrefix + " AndroidSpeechRecognizerProvider is not supported in the Unity Editor. Use MockVoiceTranscriptionProvider instead.");
-		onError?.Invoke("AndroidSpeechRecognizerProvider not supported outside Android.");
-#endif
 	}
+#endif
 }
