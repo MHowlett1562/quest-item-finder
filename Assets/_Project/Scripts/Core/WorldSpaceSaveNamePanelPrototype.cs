@@ -7,6 +7,8 @@ using UnityEngine.XR.Interaction.Toolkit.UI;
 // Canvas save name menu prototype: World Space Canvas preset-name picker shown during AppMode.SaveNaming.
 public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 {
+	private const string VoiceLogPrefix = "[VoiceNaming]";
+
 	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
 	[SerializeField] private SavedItemExample savedItemExample;
 	[SerializeField] private VoiceNamingController voiceNamingController;
@@ -486,11 +488,18 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 
 		CreateButton(actionRowObject.transform, "Voice", () =>
 		{
+			Debug.Log(VoiceLogPrefix + " Voice button onClick invoked.");
 			if (voiceNamingController != null)
 			{
 				voiceNamingController.RequestTranscriptIntoField(nameInputField);
 			}
+			else
+			{
+				Debug.LogWarning(VoiceLogPrefix + " VoiceNamingController missing at click time.");
+			}
 		});
+
+		Debug.Log(VoiceLogPrefix + " Voice button created.");
 
 		CreateButton(actionRowObject.transform, "Save", () =>
 		{
