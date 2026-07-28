@@ -19,11 +19,6 @@ public class VoiceNamingController : MonoBehaviour
 	private bool micPermissionGranted = false;
 	private bool areSpeechSystemsReady = false;
 
-	public VoiceNamingController()
-	{
-		Debug.Log(LogPrefix + " VoiceNamingController initialized.");
-	}
-
 	private void Awake()
 	{
 		Debug.Log(LogPrefix + " VoiceNamingController Awake.");
