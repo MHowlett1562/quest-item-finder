@@ -1,4 +1,5 @@
 using System.Collections;
+using Oculus.Voice.Dictation;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,9 +9,11 @@ public class VoiceNamingController : MonoBehaviour
 	private const float SpeechSystemsWarmupDelaySeconds = 0.75f;
 	private const string ListeningStatusText = "Listening...";
 	private const string RecognitionUnavailableStatusText = "Speech recognition unavailable";
+	private const string MetaVoiceUnavailableStatusText = "Meta voice unavailable";
 	private const string PermissionDeniedStatusText = "Permission denied";
 
 	[SerializeField] private string mockTranscript = "test item";
+	[SerializeField] private AppDictationExperience metaVoiceExperience;
 
 	private IVoiceTranscriptionProvider transcriptionProvider;
 	private Coroutine startupInitializationCoroutine;
@@ -24,8 +27,16 @@ public class VoiceNamingController : MonoBehaviour
 		Debug.Log(LogPrefix + " VoiceNamingController Awake.");
 		Debug.Log(LogPrefix + " VoiceNamingController initialized.");
 #if UNITY_ANDROID
-		transcriptionProvider = new AndroidSpeechRecognizerProvider();
-		Debug.Log(LogPrefix + " Selected provider: AndroidSpeechRecognizerProvider");
+		if (metaVoiceExperience != null)
+		{
+			transcriptionProvider = new MetaVoiceTranscriptionProvider(metaVoiceExperience);
+			Debug.Log(LogPrefix + " Selected provider: MetaVoiceTranscriptionProvider");
+		}
+		else
+		{
+			transcriptionProvider = null;
+			Debug.LogWarning(LogPrefix + " Meta voice runtime not assigned. Manual typing is still active.");
+		}
 #else
 		transcriptionProvider = new MockVoiceTranscriptionProvider(mockTranscript);
 		micPermissionGranted = true; // Non-Android: always treated as granted.
@@ -97,7 +108,7 @@ public class VoiceNamingController : MonoBehaviour
 
 		if (!areSpeechSystemsReady)
 		{
-			targetInputField.text = RecognitionUnavailableStatusText;
+			targetInputField.text = transcriptionProvider is MetaVoiceTranscriptionProvider ? MetaVoiceUnavailableStatusText : RecognitionUnavailableStatusText;
 			Debug.LogWarning(LogPrefix + " Speech systems not ready yet. Manual typing is still active.");
 			return;
 		}
@@ -109,18 +120,29 @@ public class VoiceNamingController : MonoBehaviour
 	{
 		if (transcriptionProvider == null)
 		{
+		#if UNITY_ANDROID
+			targetInputField.text = MetaVoiceUnavailableStatusText;
+			Debug.LogWarning(LogPrefix + " Meta voice transcription provider unavailable. Manual typing is still active.");
+			return;
+		#else
 			transcriptionProvider = new MockVoiceTranscriptionProvider(mockTranscript);
 			Debug.Log(LogPrefix + " Selected provider: MockVoiceTranscriptionProvider");
+		#endif
 		}
 
 		Debug.Log(LogPrefix + " BeginListening called.");
 		Debug.Log("[VoiceStartup] startListening called");
 
 #if UNITY_ANDROID
-		AndroidSpeechRecognizerProvider androidProvider = transcriptionProvider as AndroidSpeechRecognizerProvider;
-		if (androidProvider != null)
+		MetaVoiceTranscriptionProvider metaProvider = transcriptionProvider as MetaVoiceTranscriptionProvider;
+		if (metaProvider != null)
 		{
-			bool started = androidProvider.StartListeningWithProgress(
+			bool started = metaProvider.StartListeningWithProgress(
+				onListeningStarted: () =>
+				{
+					targetInputField.text = ListeningStatusText;
+					Debug.Log("[VoiceStartup] listening started");
+				},
 				onPartialTranscriptReceived: (partialTranscript) =>
 				{
 					targetInputField.text = partialTranscript;
@@ -133,9 +155,9 @@ public class VoiceNamingController : MonoBehaviour
 				},
 				onError: (errorMessage) =>
 				{
-					targetInputField.text = ShouldShowPermissionDenied(errorMessage) ? PermissionDeniedStatusText : RecognitionUnavailableStatusText;
+					targetInputField.text = ShouldShowPermissionDenied(errorMessage) ? PermissionDeniedStatusText : MetaVoiceUnavailableStatusText;
 					Debug.LogWarning("[VoiceStartup] recognition error: " + errorMessage);
-					Debug.LogWarning(LogPrefix + " Android speech recognition provider returned error: " + errorMessage + ". Manual typing is still active.");
+					Debug.LogWarning(LogPrefix + " Meta voice provider returned error: " + errorMessage + ". Manual typing is still active.");
 				});
 
 			if (started)
@@ -144,7 +166,7 @@ public class VoiceNamingController : MonoBehaviour
 			}
 			else
 			{
-				targetInputField.text = RecognitionUnavailableStatusText;
+				targetInputField.text = MetaVoiceUnavailableStatusText;
 			}
 
 			return;
@@ -162,7 +184,7 @@ public class VoiceNamingController : MonoBehaviour
 			{
 				targetInputField.text = ShouldShowPermissionDenied(errorMessage) ? PermissionDeniedStatusText : RecognitionUnavailableStatusText;
 				Debug.LogWarning("[VoiceStartup] recognition error: " + errorMessage);
-				Debug.LogWarning(LogPrefix + " Android speech recognition provider returned error: " + errorMessage + ". Manual typing is still active.");
+				Debug.LogWarning(LogPrefix + " Voice transcription provider returned error: " + errorMessage + ". Manual typing is still active.");
 			}
 		);
 
@@ -188,18 +210,26 @@ public class VoiceNamingController : MonoBehaviour
 		yield return new WaitForSeconds(SpeechSystemsWarmupDelaySeconds);
 
 #if UNITY_ANDROID
-		AndroidSpeechRecognizerProvider androidProvider = transcriptionProvider as AndroidSpeechRecognizerProvider;
-		if (androidProvider == null)
+		MetaVoiceTranscriptionProvider metaProvider = transcriptionProvider as MetaVoiceTranscriptionProvider;
+		if (metaProvider == null && metaVoiceExperience != null)
 		{
-			androidProvider = new AndroidSpeechRecognizerProvider();
-			transcriptionProvider = androidProvider;
-			Debug.Log(LogPrefix + " Selected provider: AndroidSpeechRecognizerProvider");
+			metaProvider = new MetaVoiceTranscriptionProvider(metaVoiceExperience);
+			transcriptionProvider = metaProvider;
+			Debug.Log(LogPrefix + " Selected provider: MetaVoiceTranscriptionProvider");
 		}
 
-		if (!androidProvider.InitializeRecognizer())
+		if (metaProvider == null)
 		{
 			areSpeechSystemsReady = false;
-			Debug.LogWarning(LogPrefix + " Speech recognizer initialization failed. Manual typing is still active.");
+			Debug.LogWarning(LogPrefix + " Meta voice runtime not assigned. Manual typing is still active.");
+			startupInitializationCoroutine = null;
+			yield break;
+		}
+
+		if (!metaProvider.HasValidConfiguration(out string configurationError))
+		{
+			areSpeechSystemsReady = false;
+			Debug.LogWarning(LogPrefix + " Meta voice initialization failed: " + configurationError + " Manual typing is still active.");
 			startupInitializationCoroutine = null;
 			yield break;
 		}
