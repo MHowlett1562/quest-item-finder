@@ -24,6 +24,7 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 	private readonly List<GameObject> presetButtons = new List<GameObject>();
 	private InputField nameInputField;
 	private string selectedName;
+	private bool wasShowingSaveNamingPanel;
 
 	private static readonly Color normalButtonColor  = new Color(0.18f, 0.22f, 0.3f,  1f);
 	private static readonly Color hoverButtonColor   = new Color(0.28f, 0.35f, 0.52f, 1f);
@@ -105,6 +106,13 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 		{
 			worldSpaceCanvas.gameObject.SetActive(shouldShow);
 		}
+
+		if (shouldShow && !wasShowingSaveNamingPanel)
+		{
+			ResetForNewSaveNamingSession();
+		}
+
+		wasShowingSaveNamingPanel = shouldShow;
 
 		if (shouldShow)
 		{
@@ -530,6 +538,16 @@ public class WorldSpaceSaveNamePanelPrototype : MonoBehaviour
 				savedItemExample.CancelNameSelectionMenu();
 			}
 		});
+	}
+
+	private void ResetForNewSaveNamingSession()
+	{
+		selectedName = null;
+
+		if (nameInputField != null)
+		{
+			nameInputField.text = string.Empty;
+		}
 	}
 
 	private GameObject CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction action, float buttonHeight = 60f)

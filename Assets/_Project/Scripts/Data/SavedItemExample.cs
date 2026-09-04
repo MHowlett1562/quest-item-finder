@@ -7,6 +7,7 @@ public class SavedItemExample : MonoBehaviour
 {
 	private SavedItemManager savedItemManager;
 	[SerializeField] private SavedItemFinderExample savedItemFinderExample;
+    [SerializeField] private VoiceOutputFeedbackController voiceOutputFeedbackController;
     [SerializeField] private SceneUnderstandingTest sceneUnderstandingTest;
     [SerializeField] private ARAnchorManager arAnchorManager;
     private bool wasRightTriggerPressed;
@@ -51,6 +52,11 @@ public class SavedItemExample : MonoBehaviour
 		{
 			savedItemFinderExample = FindFirstObjectByType<SavedItemFinderExample>();
 		}
+
+        if (voiceOutputFeedbackController == null)
+        {
+            voiceOutputFeedbackController = FindFirstObjectByType<VoiceOutputFeedbackController>();
+        }
 
         if (sceneUnderstandingTest == null)
         {
@@ -173,6 +179,8 @@ public class SavedItemExample : MonoBehaviour
 
     private void ShowNameSelectionMenu()
     {
+		bool wasMenuOpen = isNameSelectionMenuOpen;
+
         // MVP preset name selection UI: open simple headset menu before save instead of typing a name.
         isNameSelectionMenuOpen = true;
 
@@ -193,6 +201,12 @@ public class SavedItemExample : MonoBehaviour
 
         // Canvas save name menu prototype: Canvas panel is shown via WorldSpaceSaveNamePanelPrototype.
         RefreshSaveNameMenuVisualState();
+
+        if (!wasMenuOpen)
+        {
+            Debug.Log("[VoiceOutput] Save naming flow opened. Invoking SpeakNamePrompt().");
+            voiceOutputFeedbackController?.SpeakNamePrompt();
+        }
     }
 
     private void HideNameSelectionMenu()
@@ -633,6 +647,7 @@ public class SavedItemExample : MonoBehaviour
             ? "Saved duplicate: " + resolvedName
             : "Saved: " + resolvedName;
         ShowTemporarySaveFeedback(feedbackMessage);
+		voiceOutputFeedbackController?.SpeakSaveConfirmation(resolvedName);
 
         Debug.Log("Saved item: Name=" + savedItem.itemName + ", Id=" + savedItem.itemId + ", Position=" + savedItem.lastKnownPosition + ", SavedAtUtc=" + savedItem.savedAtUtc);
     }

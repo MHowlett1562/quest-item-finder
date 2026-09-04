@@ -61,18 +61,12 @@ public class MetaVoiceTranscriptionProvider : IVoiceTranscriptionProvider
 		Action<string> onFinalTranscriptReceived,
 		Action<string> onError = null)
 	{
+		ResetStaleRequestStateIfNeeded();
+
 		if (!HasValidConfiguration(out string configurationError))
 		{
 			Debug.LogWarning(LogPrefix + " Meta voice provider configuration error: " + configurationError);
 			onError?.Invoke(configurationError);
-			return false;
-		}
-
-		string activateAudioError = dictationExperience.GetActivateAudioError();
-		if (!string.IsNullOrEmpty(activateAudioError))
-		{
-			Debug.LogWarning(LogPrefix + " Meta voice activation blocked: " + activateAudioError);
-			onError?.Invoke(activateAudioError);
 			return false;
 		}
 
@@ -92,12 +86,19 @@ public class MetaVoiceTranscriptionProvider : IVoiceTranscriptionProvider
 
 		RegisterListeners();
 
+		string activateAudioError = dictationExperience.GetActivateAudioError();
+		if (!string.IsNullOrEmpty(activateAudioError))
+		{
+			Debug.LogWarning(LogPrefix + " Meta voice activation preflight warning: " + activateAudioError);
+		}
+
 		VoiceServiceRequest request = dictationExperience.Activate(new WitRequestOptions(), new VoiceServiceRequestEvents());
 		if (request == null && isRequestInProgress)
 		{
+			CleanupRequest();
 			const string activationFailedError = "Meta voice activation failed.";
 			Debug.LogWarning(LogPrefix + " " + activationFailedError);
-			HandleError("activation_failed", activationFailedError);
+			onError?.Invoke(activationFailedError);
 			return false;
 		}
 
@@ -173,5 +174,25 @@ public class MetaVoiceTranscriptionProvider : IVoiceTranscriptionProvider
 		onFinalTranscriptReceived = null;
 		onError = null;
 		isRequestInProgress = false;
+	}
+
+	private void ResetStaleRequestStateIfNeeded()
+	{
+		if (!isRequestInProgress)
+		{
+			return;
+		}
+
+		if (dictationExperience == null)
+		{
+			CleanupRequest();
+			return;
+		}
+
+		if (!dictationExperience.MicActive)
+		{
+			Debug.Log(LogPrefix + " Resetting stale Meta voice request state before starting a new session.");
+			CleanupRequest();
+		}
 	}
 }
